@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Users, UserPlus, UserCheck, AlertTriangle } from "lucide-react";
 import DashboardTile from "./DashboardTile";
-import { getDashboardStats, DashboardStats } from "@/services/mockData";
+import type { DashboardStats } from "@/services/mockData";
 
 const DashboardStats = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
