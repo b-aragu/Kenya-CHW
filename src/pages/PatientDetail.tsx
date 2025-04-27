@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Calendar, MapPin, Phone, HeartPulse, MessageSquare, ClipboardList } from "lucide-react";
 import { 
   Card,
   CardContent,
@@ -9,6 +10,7 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import MobileLayout from "@/components/layout/MobileLayout";
 import TriageForm from "@/components/triage/TriageForm";
 import { Patient, TriageResult } from "@/types/patient";
@@ -132,7 +134,7 @@ const PatientDetail = () => {
 
   return (
     <MobileLayout 
-      title={patient.name} 
+      title={patient?.name || 'Patient Details'} 
       showBack={true} 
       onBack={() => navigate("/patients")}
     >
@@ -144,37 +146,49 @@ const PatientDetail = () => {
         />
       ) : (
         <div className="space-y-6">
-          <Card>
+          <Card className="overflow-hidden bg-gradient-to-br from-white to-neutral-50">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Patient Information</CardTitle>
+              <CardTitle className="text-lg text-primary flex items-center gap-2">
+                <HeartPulse className="h-5 w-5" />
+                Patient Information
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-gray-500">Patient ID</p>
-                  <p className="font-medium">{patient.id}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="col-span-2 bg-neutral-light/50 p-3 rounded-lg">
+                  <p className="text-gray-500 text-xs">Patient ID</p>
+                  <p className="font-medium">{patient?.id}</p>
                 </div>
-                <div>
-                  <p className="text-gray-500">Gender</p>
-                  <p className="font-medium capitalize">{patient.gender}</p>
+                
+                <div className="space-y-1">
+                  <p className="text-gray-500 text-xs flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Age
+                  </p>
+                  <p className="font-medium">{calculateAge(patient?.dateOfBirth || '')} years</p>
                 </div>
-                <div>
-                  <p className="text-gray-500">Age</p>
-                  <p className="font-medium">{calculateAge(patient.dateOfBirth)} years</p>
+                
+                <div className="space-y-1">
+                  <p className="text-gray-500 text-xs">Gender</p>
+                  <p className="font-medium capitalize">{patient?.gender}</p>
                 </div>
-                <div>
-                  <p className="text-gray-500">Date of Birth</p>
-                  <p className="font-medium">{formatDate(patient.dateOfBirth)}</p>
-                </div>
-                {patient.village && (
-                  <div>
-                    <p className="text-gray-500">Village</p>
+
+                {patient?.village && (
+                  <div className="space-y-1">
+                    <p className="text-gray-500 text-xs flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Village
+                    </p>
                     <p className="font-medium">{patient.village}</p>
                   </div>
                 )}
-                {patient.phoneNumber && (
-                  <div>
-                    <p className="text-gray-500">Phone</p>
+
+                {patient?.phoneNumber && (
+                  <div className="space-y-1">
+                    <p className="text-gray-500 text-xs flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      Phone
+                    </p>
                     <p className="font-medium">{patient.phoneNumber}</p>
                   </div>
                 )}
@@ -182,17 +196,18 @@ const PatientDetail = () => {
             </CardContent>
           </Card>
 
-          <div className="flex flex-col space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <Button 
               onClick={() => setShowTriageForm(true)}
-              className="bg-primary hover:bg-primary/80 h-12"
+              className="col-span-2 bg-primary hover:bg-primary/90 h-12 gap-2"
             >
+              <ClipboardList className="h-5 w-5" />
               Start New Assessment
             </Button>
             
             <Button 
               variant="outline" 
-              className="h-12"
+              className="h-12 gap-2 border-primary/20 hover:bg-primary/5"
               onClick={() => {
                 toast({
                   title: "Coming soon!",
@@ -200,23 +215,50 @@ const PatientDetail = () => {
                 });
               }}
             >
+              <MessageSquare className="h-5 w-5" />
               Request Consultation
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-12 gap-2 border-primary/20 hover:bg-primary/5"
+              onClick={() => {
+                toast({
+                  title: "Coming soon!",
+                  description: "Patient history feature coming soon.",
+                });
+              }}
+            >
+              <Calendar className="h-5 w-5" />
+              View History
             </Button>
           </div>
 
           {triageResults.length > 0 && (
-            <Card>
+            <Card className="bg-gradient-to-br from-white to-neutral-50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Recent Assessments</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5" />
+                  Recent Assessments
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {triageResults.map((result, index) => (
-                    <div key={index} className="border rounded-md p-3 space-y-2">
+                    <div 
+                      key={index} 
+                      className={`
+                        border rounded-lg p-4 space-y-3 
+                        ${result.priority === "red" 
+                          ? "bg-red-50 border-red-100" 
+                          : result.priority === "yellow" 
+                          ? "bg-yellow-50 border-yellow-100" 
+                          : "bg-green-50 border-green-100"
+                        }
+                      `}
+                    >
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm text-gray-500">{formatDate(result.timestamp)}</p>
-                        </div>
+                        <p className="text-sm text-gray-500">{formatDate(result.timestamp)}</p>
                         <Badge 
                           className={
                             result.priority === "red" 
@@ -234,13 +276,22 @@ const PatientDetail = () => {
                           }
                         </Badge>
                       </div>
-                      <p className="text-sm font-medium">Symptoms: {result.symptoms}</p>
-                      {result.temperature && (
-                        <p className="text-sm">Temperature: {result.temperature}°C</p>
-                      )}
-                      {result.respiratoryRate && (
-                        <p className="text-sm">Respiratory Rate: {result.respiratoryRate} breaths/min</p>
-                      )}
+                      <Separator className="my-2" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">
+                          <span className="text-gray-500">Symptoms:</span> {result.symptoms}
+                        </p>
+                        {result.temperature && (
+                          <p className="text-sm">
+                            <span className="text-gray-500">Temperature:</span> {result.temperature}°C
+                          </p>
+                        )}
+                        {result.respiratoryRate && (
+                          <p className="text-sm">
+                            <span className="text-gray-500">Respiratory Rate:</span> {result.respiratoryRate} breaths/min
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

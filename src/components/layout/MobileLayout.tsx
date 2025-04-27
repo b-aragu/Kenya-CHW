@@ -1,5 +1,6 @@
 
 import { ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
 import { SyncStatus } from "@/components/ui/sync-status";
 
 interface MobileLayoutProps {
@@ -18,17 +19,17 @@ const MobileLayout = ({
   onBack,
 }: MobileLayoutProps) => {
   return (
-    <div className="flex flex-col min-h-screen bg-neutral-light">
-      <header className="sticky top-0 z-10 bg-primary text-white p-4 shadow-md">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
+    <div className="flex flex-col min-h-screen bg-neutral-light bg-[url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=200&blur=50')] bg-fixed bg-cover bg-center bg-blend-screen">
+      <header className="sticky top-0 z-10 bg-primary/95 backdrop-blur-sm text-white p-4 shadow-lg">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-3">
             {showBack && (
               <button 
                 onClick={onBack} 
-                className="mr-2 p-1"
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
                 aria-label="Go back"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                <ArrowLeft className="h-5 w-5" />
               </button>
             )}
             <h1 className="text-xl font-semibold truncate">{title}</h1>
@@ -37,8 +38,10 @@ const MobileLayout = ({
         </div>
       </header>
 
-      <main className="flex-1 p-4 overflow-auto">
-        {children}
+      <main className="flex-1 p-4 overflow-auto container max-w-lg mx-auto">
+        <div className="space-y-4">
+          {children}
+        </div>
       </main>
     </div>
   );
