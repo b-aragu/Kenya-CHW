@@ -1,13 +1,29 @@
 
+import { useEffect, useState } from "react";
 import { Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getTodayAppointments, Appointment } from "@/services/mockData";
 
 const AppointmentsCard = () => {
-  // Mock data - in real app, this would come from a data source
-  const todayAppointments = [
-    { time: "10:00", patient: "Jane Doe", type: "Follow-up" },
-    { time: "11:30", patient: "John Smith", type: "Initial" },
-  ];
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      setIsLoading(true);
+      try {
+        // In a real app, this would be an API call
+        const data = getTodayAppointments();
+        setAppointments(data);
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAppointments();
+  }, []);
 
   return (
     <Card className="w-full">
@@ -16,13 +32,23 @@ const AppointmentsCard = () => {
         <Calendar className="h-4 w-4 text-primary" />
       </CardHeader>
       <CardContent>
-        {todayAppointments.length > 0 ? (
+        {isLoading ? (
           <div className="space-y-2">
-            {todayAppointments.map((apt, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-6 bg-gray-100 animate-pulse rounded"></div>
+            ))}
+          </div>
+        ) : appointments.length > 0 ? (
+          <div className="space-y-2">
+            {appointments.map((apt) => (
+              <div key={apt.id} className="flex items-center justify-between text-sm">
                 <span className="font-medium">{apt.time}</span>
-                <span className="text-gray-600">{apt.patient}</span>
-                <span className="text-xs bg-accent px-2 py-1 rounded-full">
+                <span className="text-gray-600">{apt.patientName}</span>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  apt.type === 'Urgent' ? 'bg-destructive/10 text-destructive' :
+                  apt.type === 'Follow-up' ? 'bg-primary/10 text-primary' :
+                  'bg-accent text-accent-foreground'
+                }`}>
                   {apt.type}
                 </span>
               </div>

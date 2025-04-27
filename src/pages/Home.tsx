@@ -1,19 +1,22 @@
+
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/layout/MobileLayout";
 import AppNavigation from "@/components/AppNavigation";
-import DashboardTile from "@/components/dashboard/DashboardTile";
+import DashboardStats from "@/components/dashboard/DashboardStats";
 import SearchBar from "@/components/dashboard/SearchBar";
 import AppointmentsCard from "@/components/dashboard/AppointmentsCard";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, UserCheck, AlertTriangle, Bell } from "lucide-react";
+import { UserPlus, Users, Bell } from "lucide-react";
+import { getRecentActivity, Activity } from "@/services/mockData";
 
 const Home = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("CHW");
   const [isLoading, setIsLoading] = useState(true);
   const [hasNotifications, setHasNotifications] = useState(true);
+  const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -23,16 +26,24 @@ const Home = () => {
       return;
     }
 
-    // Simulate loading user data
-    const timer = setTimeout(() => {
-      setUserName("David Mwangi");
-      setIsLoading(false);
-    }, 500);
+    // Simulate loading user data and activity
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // This would be a real API call in production
+        setUserName("David Mwangi");
+        const activity = getRecentActivity();
+        setRecentActivity(activity);
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    loadData();
   }, [navigate]);
 
-  // Get current time of day for greeting
   const getGreeting = () => {
     const hours = new Date().getHours();
     if (hours < 12) return "Good Morning";
@@ -57,34 +68,9 @@ const Home = () => {
             </div>
 
             <SearchBar />
-
-            <div className="grid grid-cols-2 gap-4">
-              <DashboardTile
-                title="Total Patients"
-                value="24"
-                icon={<Users />}
-                color="bg-primary"
-              />
-              <DashboardTile
-                title="New This Week"
-                value="5"
-                icon={<UserPlus />}
-                color="bg-secondary"
-              />
-              <DashboardTile
-                title="Follow-ups"
-                value="3"
-                icon={<UserCheck />}
-                color="bg-primary"
-              />
-              <DashboardTile
-                title="Urgent Cases"
-                value="1"
-                icon={<AlertTriangle />}
-                color="bg-destructive"
-              />
-            </div>
-
+            
+            <DashboardStats />
+            
             <AppointmentsCard />
 
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -99,8 +85,19 @@ const Home = () => {
                   )}
                 </div>
                 <div className="space-y-2 text-sm">
-                  <p className="text-gray-600">New patient registered - 2h ago</p>
-                  <p className="text-gray-600">Follow-up completed - 4h ago</p>
+                  {recentActivity.map((activity) => (
+                    <div 
+                      key={activity.id}
+                      className={`p-2 rounded-md ${
+                        activity.type === 'urgent' ? 'bg-destructive/10' : 
+                        activity.type === 'new_patient' ? 'bg-secondary/10' :
+                        'bg-accent/10'
+                      }`}
+                    >
+                      <p className="text-gray-600">{activity.message}</p>
+                      <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
