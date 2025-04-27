@@ -1,4 +1,3 @@
-
 export interface Patient {
   id: string;
   name: string;
@@ -8,6 +7,13 @@ export interface Patient {
   phoneNumber?: string;
   createdAt: string;
   followUp: boolean;
+  medicalHistory?: string;
+  chronicConditions?: string[];
+  allergies?: string[];
+  medications?: string[];
+  pregnancyStatus?: string;
+  weight?: string;
+  height?: string;
 }
 
 export interface TriageResult {

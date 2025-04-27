@@ -1,7 +1,6 @@
-
 import { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { SyncStatus } from "@/components/ui/sync-status";
+import { SyncIndicator } from "@/components/ui/sync-indicator";
 
 interface MobileLayoutProps {
   title: string;
@@ -34,7 +33,7 @@ const MobileLayout = ({
             )}
             <h1 className="text-xl font-semibold truncate">{title}</h1>
           </div>
-          {showSync && <SyncStatus />}
+          {showSync && <SyncIndicator />}
         </div>
       </header>
 

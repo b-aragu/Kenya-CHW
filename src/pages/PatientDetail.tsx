@@ -1,8 +1,7 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, Phone, HeartPulse, MessageSquare, ClipboardList } from "lucide-react";
+import { Calendar, MapPin, Phone, HeartPulse, MessageSquare, ClipboardList, Stethoscope } from "lucide-react";
 import { 
   Card,
   CardContent,
@@ -15,6 +14,7 @@ import MobileLayout from "@/components/layout/MobileLayout";
 import TriageForm from "@/components/triage/TriageForm";
 import { Patient, TriageResult } from "@/types/patient";
 import { useToast } from "@/components/ui/use-toast";
+import { ConsultationRequest } from "@/services/groqService";
 
 const PatientDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -199,34 +199,57 @@ const PatientDetail = () => {
           <div className="grid grid-cols-2 gap-4">
             <Button 
               onClick={() => setShowTriageForm(true)}
-              className="col-span-2 bg-primary hover:bg-primary/90 h-12 gap-2"
+              className="col-span-1 bg-primary hover:bg-primary/90 h-12 gap-2"
             >
               <ClipboardList className="h-5 w-5" />
-              Start New Assessment
+              New Assessment
+            </Button>
+            
+            <Button 
+              variant="secondary"
+              className="col-span-1 h-12 gap-2"
+              onClick={() => {
+                if (patient) {
+                  // Calculate age from date of birth
+                  const birthDate = new Date(patient.dateOfBirth);
+                  const today = new Date();
+                  let age = today.getFullYear() - birthDate.getFullYear();
+                  const monthDiff = today.getMonth() - birthDate.getMonth();
+                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                  }
+                
+                  // Navigate to consult page with patient information
+                  localStorage.setItem('create-consultation', JSON.stringify({
+                    patientId: patient.id,
+                    patientName: patient.name,
+                    patientInfo: {
+                      age,
+                      gender: patient.gender,
+                      village: patient.village,
+                      medicalHistory: patient.medicalHistory,
+                      chronicConditions: patient.chronicConditions,
+                      allergies: patient.allergies,
+                      medications: patient.medications,
+                      pregnancyStatus: patient.gender === 'female' ? patient.pregnancyStatus : undefined,
+                    }
+                  }));
+                  
+                  // Navigate to consult page
+                  navigate('/consult');
+                }
+              }}
+            >
+              <Stethoscope className="h-5 w-5" />
+              New Consultation
             </Button>
             
             <Button 
               variant="outline" 
-              className="h-12 gap-2 border-primary/20 hover:bg-primary/5"
+              className="col-span-2 h-12 gap-2 border-primary/20 hover:bg-primary/5"
               onClick={() => {
-                toast({
-                  title: "Coming soon!",
-                  description: "This feature will be available in the next release.",
-                });
-              }}
-            >
-              <MessageSquare className="h-5 w-5" />
-              Request Consultation
-            </Button>
-
-            <Button 
-              variant="outline" 
-              className="h-12 gap-2 border-primary/20 hover:bg-primary/5"
-              onClick={() => {
-                toast({
-                  title: "Coming soon!",
-                  description: "Patient history feature coming soon.",
-                });
+                // Navigate to patient history page
+                navigate(`/patients/${patient?.id}/history`);
               }}
             >
               <Calendar className="h-5 w-5" />
