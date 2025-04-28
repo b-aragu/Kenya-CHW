@@ -138,10 +138,16 @@ const Consult = () => {
       try {
         const consultData = JSON.parse(pendingConsultation);
         
-        // Populate the form with the patient data
+        // Populate the form with all the data from the assessment
         setFormData({
           ...formData,
           patientId: consultData.patientId,
+          symptoms: consultData.symptoms || "",
+          temperature: consultData.vitalSigns?.temperature || "",
+          respiratoryRate: consultData.vitalSigns?.respiratoryRate || "",
+          bloodPressure: consultData.vitalSigns?.bloodPressure || "",
+          heartRate: consultData.vitalSigns?.heartRate || "",
+          additionalNotes: consultData.additionalNotes || "",
         });
         
         // Remove the pending consultation data
@@ -165,7 +171,7 @@ const Consult = () => {
       const mockConsultations = [
         {
           id: "CON-001",
-              patientId: "CHW-001234",
+          patientId: "CHW-001234",
           patientName: "Jane Wambui",
               symptoms: "Patient has severe breathing difficulty and high fever",
               status: "active" as const,
@@ -175,7 +181,7 @@ const Consult = () => {
         },
         {
           id: "CON-002",
-              patientId: "CHW-004567",
+          patientId: "CHW-004567",
           patientName: "James Odhiambo",
               symptoms: "Patient with persistent cough for 2 weeks",
               status: "pending" as const,
@@ -185,7 +191,7 @@ const Consult = () => {
         },
         {
           id: "CON-003",
-              patientId: "CHW-005678",
+          patientId: "CHW-005678",
           patientName: "Sarah Mutua",
               symptoms: "Follow-up on previous malaria treatment",
               status: "completed" as const,
@@ -200,6 +206,20 @@ const Consult = () => {
       setConsultations(mockConsultations);
         } else {
           setConsultations(storedConsultations);
+        }
+
+        // Check if there's a consultation to open
+        const consultationIdToOpen = localStorage.getItem('open-consultation-id');
+        if (consultationIdToOpen) {
+          // Find the consultation
+          const consultationToOpen = storedConsultations.find(c => c.id === consultationIdToOpen);
+          if (consultationToOpen) {
+            // Open the consultation
+            setSelectedConsultation(consultationToOpen);
+            setIsDetailOpen(true);
+          }
+          // Remove the stored ID
+          localStorage.removeItem('open-consultation-id');
         }
       } catch (error) {
         console.error("Error loading consultations:", error);
@@ -225,7 +245,7 @@ const Consult = () => {
   // Handle creating a new consultation
   const handleCreateConsultation = async () => {
     if (!formData.patientId || !formData.symptoms) {
-      toast({
+    toast({
         title: "Required fields missing",
         description: "Please select a patient and enter symptoms",
         variant: "destructive",
@@ -1150,7 +1170,7 @@ ${consultation.response.patientEducation}
                           <p className="font-medium">{item.patientName}</p>
                           <p className="text-sm text-gray-500 line-clamp-1">{item.request.symptoms}</p>
                           <p className="text-xs text-gray-400">{new Date(item.timestamp).toLocaleString()}</p>
-                        </div>
+            </div>
                         <Badge variant="outline" className="h-fit border-amber-500 text-amber-600">
                           Queued
                         </Badge>

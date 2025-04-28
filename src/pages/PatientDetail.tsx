@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, Phone, HeartPulse, MessageSquare, ClipboardList, Stethoscope } from "lucide-react";
+import { Calendar, MapPin, Phone, HeartPulse, MessageSquare, ClipboardList, Stethoscope, ArrowRight } from "lucide-react";
 import { 
   Card,
   CardContent,
@@ -15,6 +15,7 @@ import TriageForm from "@/components/triage/TriageForm";
 import { Patient, TriageResult } from "@/types/patient";
 import { useToast } from "@/components/ui/use-toast";
 import { ConsultationRequest } from "@/services/groqService";
+import { getConsultations } from "@/services/groqService";
 
 const PatientDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +26,7 @@ const PatientDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [triageResults, setTriageResults] = useState<TriageResult[]>([]);
   const [showTriageForm, setShowTriageForm] = useState(false);
+  const [consultations, setConsultations] = useState<any[]>([]);
 
   useEffect(() => {
     // Load patient data from localStorage
@@ -44,6 +46,11 @@ const PatientDetail = () => {
             const patientResults = allResults.filter(r => r.patientId === id);
             setTriageResults(patientResults);
           }
+          
+          // Load consultations for this patient
+          const allConsultations = getConsultations();
+          const patientConsultations = allConsultations.filter(c => c.patientId === id);
+          setConsultations(patientConsultations);
         } else {
           toast({
             title: "Patient not found",
@@ -102,6 +109,17 @@ const PatientDetail = () => {
       month: "short",
       year: "numeric",
     });
+  };
+
+  // Check if a consultation exists for the given assessment symptoms
+  const hasConsultationForAssessment = (symptoms: string) => {
+    // Check if there's already a consultation with these symptoms
+    return consultations.some(c => c.symptoms.includes(symptoms) || symptoms.includes(c.symptoms));
+  };
+
+  // Add a new function to get the consultation for a given assessment:
+  const getConsultationForAssessment = (symptoms: string) => {
+    return consultations.find(c => c.symptoms.includes(symptoms) || symptoms.includes(c.symptoms));
   };
 
   if (isLoading) {
@@ -313,6 +331,72 @@ const PatientDetail = () => {
                           <p className="text-sm">
                             <span className="text-gray-500">Respiratory Rate:</span> {result.respiratoryRate} breaths/min
                           </p>
+                        )}
+                        
+                        {hasConsultationForAssessment(result.symptoms) ? (
+                          <Button 
+                            variant="link" 
+                            size="sm"
+                            className="text-primary p-0 h-auto font-medium mt-3"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const consultation = getConsultationForAssessment(result.symptoms);
+                              if (consultation) {
+                                // Store the consultation ID for the Consult page to pick up
+                                localStorage.setItem('open-consultation-id', consultation.id);
+                                navigate('/consult');
+                              }
+                            }}
+                          >
+                            <span className="flex items-center">
+                              Open Consultation <ArrowRight className="h-3 w-3 ml-1" />
+                            </span>
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-3"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (patient) {
+                                // Calculate age from date of birth
+                                const birthDate = new Date(patient.dateOfBirth);
+                                const today = new Date();
+                                let age = today.getFullYear() - birthDate.getFullYear();
+                                const monthDiff = today.getMonth() - birthDate.getMonth();
+                                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                                  age--;
+                                }
+                              
+                                // Create consultation from this assessment
+                                localStorage.setItem('create-consultation', JSON.stringify({
+                                  patientId: patient.id,
+                                  patientName: patient.name,
+                                  patientInfo: {
+                                    age,
+                                    gender: patient.gender,
+                                    village: patient.village,
+                                    medicalHistory: patient.medicalHistory,
+                                    chronicConditions: patient.chronicConditions,
+                                    allergies: patient.allergies,
+                                    medications: patient.medications,
+                                    pregnancyStatus: patient.gender === 'female' ? patient.pregnancyStatus : undefined,
+                                  },
+                                  symptoms: result.symptoms,
+                                  vitalSigns: {
+                                    temperature: result.temperature,
+                                    respiratoryRate: result.respiratoryRate
+                                  }
+                                }));
+                                
+                                // Navigate to consult page
+                                navigate('/consult');
+                              }
+                            }}
+                          >
+                            Create Consultation
+                          </Button>
                         )}
                       </div>
                     </div>

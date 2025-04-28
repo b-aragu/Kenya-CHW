@@ -163,6 +163,15 @@ const PatientHistory = () => {
     return consultations.filter(c => c.priority === priority).length;
   };
   
+  const hasConsultationForAssessment = (symptoms: string) => {
+    // Check if there's already a consultation with these symptoms
+    return consultations.some(c => c.symptoms.includes(symptoms) || symptoms.includes(c.symptoms));
+  };
+  
+  const getConsultationForAssessment = (symptoms: string) => {
+    return consultations.find(c => c.symptoms.includes(symptoms) || symptoms.includes(c.symptoms));
+  };
+  
   return (
     <MobileLayout 
       title="Patient History"
@@ -329,7 +338,11 @@ const PatientHistory = () => {
                   
                   <ScrollArea className="h-[400px] pr-4 -mr-4">
                     {consultations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(consultation => (
-                      <Card key={consultation.id} className="mb-3 hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate('/consult')}>
+                      <Card key={consultation.id} className="mb-3 hover:shadow-md transition-shadow cursor-pointer" onClick={() => {
+                        // Store the consultation ID in localStorage for the Consult page to pick up
+                        localStorage.setItem('open-consultation-id', consultation.id);
+                        navigate('/consult');
+                      }}>
                         <CardContent className="p-4">
                           <div className="flex justify-between items-start mb-2">
                             <div className="space-y-1">
@@ -447,6 +460,73 @@ const PatientHistory = () => {
                               <span className="text-gray-500">Respiratory Rate:</span> {result.respiratoryRate} breaths/min
                             </p>
                           )}
+                          
+                          <div className="mt-3 flex justify-end">
+                            {hasConsultationForAssessment(result.symptoms) ? (
+                              <Button 
+                                variant="link" 
+                                size="sm"
+                                className="text-primary p-0 h-auto font-medium"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const consultation = getConsultationForAssessment(result.symptoms);
+                                  if (consultation) {
+                                    // Store the consultation ID for the Consult page to pick up
+                                    localStorage.setItem('open-consultation-id', consultation.id);
+                                    navigate('/consult');
+                                  }
+                                }}
+                              >
+                                <span className="flex items-center">
+                                  Open Consultation <ArrowRight className="h-3 w-3 ml-1" />
+                                </span>
+                              </Button>
+                            ) : (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (patient) {
+                                    // Calculate age from date of birth
+                                    const birthDate = new Date(patient.dateOfBirth);
+                                    const today = new Date();
+                                    let age = today.getFullYear() - birthDate.getFullYear();
+                                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                                      age--;
+                                    }
+                                  
+                                    // Create consultation from this assessment
+                                    localStorage.setItem('create-consultation', JSON.stringify({
+                                      patientId: patient.id,
+                                      patientName: patient.name,
+                                      patientInfo: {
+                                        age,
+                                        gender: patient.gender,
+                                        village: patient.village,
+                                        medicalHistory: patient.medicalHistory,
+                                        chronicConditions: patient.chronicConditions,
+                                        allergies: patient.allergies,
+                                        medications: patient.medications,
+                                        pregnancyStatus: patient.gender === 'female' ? patient.pregnancyStatus : undefined,
+                                      },
+                                      symptoms: result.symptoms,
+                                      vitalSigns: {
+                                        temperature: result.temperature,
+                                        respiratoryRate: result.respiratoryRate
+                                      }
+                                    }));
+                                    
+                                    // Navigate to consult page
+                                    navigate('/consult');
+                                  }
+                                }}
+                              >
+                                Create Consultation
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
