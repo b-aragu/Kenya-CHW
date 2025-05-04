@@ -10,26 +10,31 @@ const register = async (req, res) => {
         const user = await User.create({name, email, phone, role, password_hash})
         res.status(201).json({message: 'User registered successfully', user});
     } catch (error) {
-        res.status(500).json({message: 'Error registering user', error})
-        console.log(error)
+        res.status(500).json({message: 'Error registering user', error});
+        console.error(error);
     }
 };
 
 const login = async (req, res) => {
     try{
         const{phone, password} = req.body;
-        const user = await  User.findOne({where: {phone}});
+        const user = await  User.findOne({where: { phone } });
 
-        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-            return res.status(401).json({message: 'Invalid credentials'});
+        if (!user) {
+            return res.status(401).json({message: 'User not found'});
         }
 
-        const token = jwt.sign({id: user.id, role: user.role}, process.env.JWT_SECRET, {expires: '1h'});
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(401).json({message: 'Invalid password/pin'})
+        }
+
+        const token = jwt.sign({id: user.id, role: user.role}, process.env.JWT_SECRET, {expiresIn: '1h'});
 
         res.json({message: 'Login successful', token})
     } catch (error){
-        res.status(500).json({message: 'Error logging in', error});
-        console.log(error)
+        console.error('Login Error: ', error);
+        res.status(500).json({message: 'Error logging in', error: error.message});
     }
 };
 
