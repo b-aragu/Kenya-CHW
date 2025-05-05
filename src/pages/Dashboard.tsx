@@ -16,9 +16,16 @@ import {
   AlertTriangle, 
   ArrowUpRight, 
   CheckCircle2, 
-  Users2
+  Users2,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  MessageSquare,
+  Clock,
+  ArrowRight
 } from "lucide-react";
 import { getConsultations } from "@/services/groqService";
+import { Button } from "@/components/ui/button";
 
 // Add consultation analytics functions
 const getConsultationStats = () => {
@@ -80,6 +87,7 @@ const Dashboard = () => {
   const [followUpCount, setFollowUpCount] = useState(0);
   const [appointmentsCount, setAppointmentsCount] = useState(0);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [showAllActivities, setShowAllActivities] = useState(false);
   
   // Add consultStats state
   const [consultStats, setConsultStats] = useState({
@@ -156,32 +164,78 @@ const Dashboard = () => {
         ) : (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="pt-6">
+              <Card 
+                className="cursor-pointer hover:shadow-md transition-all bg-white border-l-4 border-primary hover:scale-[1.02]"
+                onClick={() => navigate('/patients')}
+              >
+                <CardContent className="pt-6 pb-6">
                   <div className="text-center">
-                    <Users className="h-8 w-8 mx-auto text-primary opacity-80" />
+                    <Users className="h-8 w-8 mx-auto text-primary" />
                     <h3 className="mt-2 font-semibold text-neutral-600">Patients</h3>
                     <p className="text-3xl font-bold text-primary mt-2">{patientsCount}</p>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center justify-center">
+                      <ArrowRight className="h-3 w-3 mr-1" /> View all patients
+                    </p>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
+              <Card 
+                className="cursor-pointer hover:shadow-md transition-all bg-white border-l-4 border-blue-400 hover:scale-[1.02]"
+                onClick={() => {
+                  // Store appointment view preference
+                  localStorage.setItem('appointment-view', 'all');
+                  navigate('/patients');
+                }}
+              >
+                <CardContent className="pt-6 pb-6">
                   <div className="text-center">
-                    <Calendar className="h-8 w-8 mx-auto text-primary opacity-80" />
+                    <Calendar className="h-8 w-8 mx-auto text-blue-500" />
                     <h3 className="mt-2 font-semibold text-neutral-600">Appointments</h3>
-                    <p className="text-3xl font-bold text-primary mt-2">{appointmentsCount}</p>
+                    <p className="text-3xl font-bold text-blue-500 mt-2">{appointmentsCount}</p>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center justify-center">
+                      <ArrowRight className="h-3 w-3 mr-1" /> View all appointments
+                    </p>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
+              <Card 
+                className="cursor-pointer hover:shadow-md transition-all bg-white border-l-4 border-amber-500 hover:scale-[1.02]"
+                onClick={() => {
+                  // Navigate to patients with follow-up filter
+                  localStorage.setItem('patients-filter', 'follow-up');
+                  navigate('/patients');
+                }}
+              >
+                <CardContent className="pt-6 pb-6">
                   <div className="text-center">
-                    <Activity className="h-8 w-8 mx-auto text-primary opacity-80" />
+                    <Activity className="h-8 w-8 mx-auto text-amber-500" />
                     <h3 className="mt-2 font-semibold text-neutral-600">Follow-ups</h3>
-                    <p className="text-3xl font-bold text-primary mt-2">{followUpCount}</p>
+                    <p className="text-3xl font-bold text-amber-500 mt-2">{followUpCount}</p>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center justify-center">
+                      <ArrowRight className="h-3 w-3 mr-1" /> View patients needing follow-up
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card 
+                className="cursor-pointer hover:shadow-md transition-all bg-white border-l-4 border-red-500 hover:scale-[1.02]"
+                onClick={() => {
+                  // Navigate to high priority consultations
+                  localStorage.setItem('consult-filter', 'high-priority');
+                  navigate('/consult');
+                }}
+              >
+                <CardContent className="pt-6 pb-6">
+                  <div className="text-center">
+                    <AlertTriangle className="h-8 w-8 mx-auto text-red-500" />
+                    <h3 className="mt-2 font-semibold text-neutral-600">Urgent Cases</h3>
+                    <p className="text-3xl font-bold text-red-500 mt-2">{consultStats.highPriority}</p>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center justify-center">
+                      <ArrowRight className="h-3 w-3 mr-1" /> View high priority consultations
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -193,13 +247,19 @@ const Dashboard = () => {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {/* Total Consultations */}
-                <Card className="bg-white">
+                <Card 
+                  className="bg-white cursor-pointer hover:shadow-md transition-all hover:border-primary hover:scale-[1.02]"
+                  onClick={() => navigate('/consult')}
+                >
                   <CardContent className="pt-6">
                     <div className="text-center">
-                      <Users2 className="h-8 w-8 mx-auto text-primary opacity-80" />
+                      <Users2 className="h-8 w-8 mx-auto text-primary" />
                       <h3 className="mt-2 font-semibold text-neutral-600">Total Consultations</h3>
                       <p className="text-3xl font-bold text-primary mt-2">{consultStats.totalConsultations}</p>
                       <p className="text-sm text-neutral-500 mt-1">This month: {consultStats.thisMonthTotal}</p>
+                      <p className="text-xs text-gray-500 mt-1 flex items-center justify-center">
+                        <ArrowRight className="h-3 w-3 mr-1" /> View all consultations
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -229,21 +289,39 @@ const Dashboard = () => {
                 </Card>
                 
                 {/* Status Breakdown */}
-                <Card className="bg-white">
+                <Card className="bg-white cursor-pointer hover:shadow-md transition-all hover:border-primary">
                   <CardContent className="pt-6">
                     <div className="text-center">
-                      <CheckCircle2 className="h-8 w-8 mx-auto text-primary opacity-80" />
+                      <CheckCircle2 className="h-8 w-8 mx-auto text-primary" />
                       <h3 className="mt-2 font-semibold text-neutral-600">By Status</h3>
                       <div className="grid grid-cols-3 gap-1 mt-2">
-                        <div className="text-center">
+                        <div 
+                          className="text-center cursor-pointer hover:bg-gray-50 rounded p-1"
+                          onClick={() => {
+                            localStorage.setItem('consult-filter', 'active');
+                            navigate('/consult');
+                          }}
+                        >
                           <p className="text-xs">Active</p>
                           <p className="text-lg font-semibold">{consultStats.activeConsultations}</p>
                         </div>
-                        <div className="text-center">
+                        <div 
+                          className="text-center cursor-pointer hover:bg-gray-50 rounded p-1"
+                          onClick={() => {
+                            localStorage.setItem('consult-filter', 'pending');
+                            navigate('/consult');
+                          }}
+                        >
                           <p className="text-xs">Pending</p>
                           <p className="text-lg font-semibold">{consultStats.pendingConsultations}</p>
                         </div>
-                        <div className="text-center">
+                        <div 
+                          className="text-center cursor-pointer hover:bg-gray-50 rounded p-1"
+                          onClick={() => {
+                            localStorage.setItem('consult-filter', 'completed');
+                            navigate('/consult');
+                          }}
+                        >
                           <p className="text-xs">Completed</p>
                           <p className="text-lg font-semibold">{consultStats.completedConsultations}</p>
                         </div>
@@ -270,19 +348,100 @@ const Dashboard = () => {
             
             {/* Recent Activities */}
             {recentActivities.length > 0 && (
-              <div>
-                <h2 className="text-lg font-semibold mb-3">Recent Activities</h2>
+              <div className="border bg-white rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-lg font-semibold">Recent Activities</h2>
+                  {recentActivities.length > 2 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setShowAllActivities(!showAllActivities)}
+                      className="h-8 px-2"
+                    >
+                      {showAllActivities ? (
+                        <span className="flex items-center text-xs">
+                          Show less <ChevronUp className="h-4 w-4 ml-1" />
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-xs">
+                          Show all <ChevronDown className="h-4 w-4 ml-1" />
+                        </span>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
                 <div className="space-y-3">
-                  {recentActivities.map((activity, index) => (
-                    <Card key={index} className="overflow-hidden">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between">
-                          <p className="text-sm">{activity.message}</p>
-                          <p className="text-xs text-gray-500">{activity.timestamp}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                  {recentActivities
+                    .slice(0, showAllActivities ? recentActivities.length : 2)
+                    .map((activity, index) => {
+                      // Get icon based on activity type
+                      let ActivityIcon = Clock;
+                      if (activity.message.includes("consultation")) {
+                        ActivityIcon = MessageSquare;
+                      } else if (activity.message.includes("assessment")) {
+                        ActivityIcon = ClipboardList;
+                      } else if (activity.message.includes("appointment")) {
+                        ActivityIcon = Calendar;
+                      } else if (activity.message.includes("patient")) {
+                        ActivityIcon = Users;
+                      }
+                      
+                      return (
+                        <Card 
+                          key={index} 
+                          className="overflow-hidden bg-white hover:shadow-md transition-shadow border-l-0 hover:border-l-4 hover:border-l-primary pl-0 hover:pl-0"
+                          onClick={() => {
+                            if (activity.message.includes("consultation")) {
+                              navigate('/consult');
+                            } else if (activity.message.includes("appointment")) {
+                              navigate('/patients');
+                            } else if (activity.message.includes("patient")) {
+                              navigate('/patients');
+                            } else {
+                              // Default navigation
+                              navigate('/patients');
+                            }
+                          }}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex gap-3">
+                              <div className={`
+                                ${activity.message.includes("consultation") ? "text-blue-500" : 
+                                  activity.message.includes("assessment") ? "text-amber-500" : 
+                                  activity.message.includes("appointment") ? "text-green-500" : 
+                                  activity.message.includes("patient") ? "text-primary" : 
+                                  "text-gray-500"}
+                              `}>
+                                <ActivityIcon className="h-5 w-5" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{activity.message}</p>
+                                <div className="flex items-center mt-1">
+                                  <Clock className="h-3 w-3 text-gray-400 mr-1" />
+                                  <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                                </div>
+                              </div>
+                              <div className="self-center text-gray-300">
+                                <ArrowRight className="h-4 w-4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    
+                  {!showAllActivities && recentActivities.length > 2 && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full py-1 h-auto text-xs"
+                      onClick={() => setShowAllActivities(true)}
+                    >
+                      <span className="flex items-center">
+                        Show {recentActivities.length - 2} more activities <ChevronDown className="h-3 w-3 ml-1" />
+                      </span>
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

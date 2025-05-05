@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ const Patients = () => {
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showFollowUpsOnly, setShowFollowUpsOnly] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -66,6 +66,14 @@ const Patients = () => {
 
     // Simulate network delay
     setTimeout(loadPatients, 800);
+    
+    // Check if there's a filter set from the Dashboard
+    const patientsFilter = localStorage.getItem('patients-filter');
+    if (patientsFilter === 'follow-up') {
+      setShowFollowUpsOnly(true);
+      // Remove the filter preference
+      localStorage.removeItem('patients-filter');
+    }
   }, [navigate]);
 
   const handlePatientSelect = (id: string) => {
@@ -81,7 +89,22 @@ const Patients = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
+              {showFollowUpsOnly && (
+                <div className="text-sm text-primary font-medium flex items-center">
+                  <svg className="mr-1" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                  Follow-up Patients 
+                  <button 
+                    className="ml-2 text-xs bg-gray-100 p-1 rounded"
+                    onClick={() => setShowFollowUpsOnly(false)}
+                  >
+                    Clear filter
+                  </button>
+                </div>
+              )}
               <Button 
                 onClick={() => navigate('/patients/add')}
                 className="bg-primary hover:bg-primary/80"
@@ -95,7 +118,10 @@ const Patients = () => {
             </div>
             
             <PatientList 
-              patients={patients} 
+              patients={showFollowUpsOnly 
+                ? patients.filter(patient => patient.followUp) 
+                : patients
+              } 
               onPatientSelect={handlePatientSelect} 
             />
           </div>

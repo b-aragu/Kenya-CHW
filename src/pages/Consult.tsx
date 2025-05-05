@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, AlertCircle, ArrowRight, ListFilter } from "lucide-react";
+import { Loader2, Plus, AlertCircle, ArrowRight, ListFilter, Calendar } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +95,9 @@ const Consult = () => {
   const [isOffline, setIsOffline] = useState(false);
   const [queuedConsultations, setQueuedConsultations] = useState<any[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+
+  // Add state to track high priority filter
+  const [showHighPriorityOnly, setShowHighPriorityOnly] = useState(false);
 
   const checkGroqConnection = async () => {
     try {
@@ -234,6 +237,33 @@ const Consult = () => {
     };
 
     loadConsultations();
+    
+    // Check if there's a filter to apply from the Dashboard navigation
+    const consultFilter = localStorage.getItem('consult-filter');
+    if (consultFilter) {
+      // Apply the appropriate filter based on the parameter
+      if (consultFilter === 'high-priority') {
+        setFilter('all'); // Keep 'all' to show all statuses
+        // Set high priority filter
+        setShowHighPriorityOnly(true);
+        
+        toast({
+          title: "Filter Applied",
+          description: "Showing high priority consultations",
+        });
+      } else if (consultFilter === 'active' || consultFilter === 'pending' || consultFilter === 'completed') {
+        // Set the status filter
+        setFilter(consultFilter);
+        
+        toast({
+          title: "Filter Applied",
+          description: `Showing ${consultFilter} consultations`,
+        });
+      }
+      
+      // Remove the filter preference
+      localStorage.removeItem('consult-filter');
+    }
   }, [navigate, toast]);
 
   // Handle opening the consultation detail dialog
@@ -480,9 +510,13 @@ const Consult = () => {
   };
 
   // Filter consultations based on status
-  const filteredConsultations = filter === "all" 
+  const statusFiltered = filter === 'all' 
     ? consultations 
-    : consultations.filter(c => c.status === filter);
+    : consultations.filter(consultation => consultation.status === filter);
+
+  const filteredConsultations = showHighPriorityOnly
+    ? statusFiltered.filter(consultation => consultation.priority === 'high')
+    : statusFiltered;
 
   // Handle updating consultation status
   const handleUpdateStatus = async (consultation: Consultation, newStatus: "active" | "pending" | "completed") => {
@@ -969,6 +1003,101 @@ ${consultation.response.patientEducation}
       });
     } finally {
       setIsProcessingQueue(false);
+    }
+  };
+
+  // Add the handleScheduleFollowUp function
+  const handleScheduleFollowUp = (consultation: Consultation) => {
+    try {
+      // Find the patient
+      const storedPatients = localStorage.getItem("kenya-chw-patients");
+      if (storedPatients) {
+        const patients: Patient[] = JSON.parse(storedPatients);
+        const patientIndex = patients.findIndex(p => p.id === consultation.patientId);
+        
+        if (patientIndex !== -1) {
+          // Mark patient as needing follow-up
+          patients[patientIndex].followUp = true;
+          
+          // Save the updated patients array
+          localStorage.setItem("kenya-chw-patients", JSON.stringify(patients));
+          
+          // Create a follow-up appointment
+          const now = new Date();
+          const followUpDate = new Date(now);
+          
+          // Parse follow-up recommendation to set appointment date
+          let daysToAdd = 7; // Default is one week
+          const recommendation = consultation.response?.followUpRecommendation?.toLowerCase() || '';
+          
+          if (recommendation.includes('24 hour') || recommendation.includes('tomorrow') || recommendation.includes('day')) {
+            daysToAdd = 1;
+          } else if (recommendation.includes('48 hour') || recommendation.includes('2 day') || recommendation.includes('two day')) {
+            daysToAdd = 2;
+          } else if (recommendation.includes('3 day') || recommendation.includes('three day')) {
+            daysToAdd = 3;
+          } else if (recommendation.includes('week')) {
+            const weekMatch = recommendation.match(/(\d+)\s*week/);
+            if (weekMatch && weekMatch[1]) {
+              daysToAdd = parseInt(weekMatch[1]) * 7;
+            }
+          } else if (recommendation.includes('month')) {
+            const monthMatch = recommendation.match(/(\d+)\s*month/);
+            if (monthMatch && monthMatch[1]) {
+              daysToAdd = parseInt(monthMatch[1]) * 30;
+            }
+          }
+          
+          followUpDate.setDate(followUpDate.getDate() + daysToAdd);
+          
+          // Format date and time for the appointment
+          const formattedDate = followUpDate.toISOString().split('T')[0];
+          const hours = String(9 + Math.floor(Math.random() * 8)).padStart(2, '0'); // Random time between 9am and 5pm
+          const formattedTime = `${hours}:00`;
+          
+          // Create appointment object
+          const followUpAppointment = {
+            id: `APT-${Date.now().toString().slice(-6)}`,
+            patientId: consultation.patientId,
+            patientName: consultation.patientName,
+            date: formattedDate,
+            time: formattedTime,
+            type: "Follow-up Consultation",
+            notes: `Follow-up for consultation ${consultation.id}. ${consultation.response?.followUpRecommendation || ''}`,
+            status: "scheduled",
+            createdAt: new Date().toISOString()
+          };
+          
+          // Add to appointments
+          const storedAppointments = localStorage.getItem("kenya-chw-appointments");
+          const appointments = storedAppointments ? JSON.parse(storedAppointments) : [];
+          appointments.unshift(followUpAppointment);
+          localStorage.setItem("kenya-chw-appointments", JSON.stringify(appointments));
+          
+          // Add activity record
+          const activity = {
+            timestamp: new Date().toLocaleString(),
+            message: `Scheduled follow-up for ${consultation.patientName} on ${formattedDate} at ${formattedTime}`
+          };
+          
+          const storedActivities = localStorage.getItem("kenya-chw-activity");
+          const activities = storedActivities ? JSON.parse(storedActivities) : [];
+          activities.unshift(activity);
+          localStorage.setItem("kenya-chw-activity", JSON.stringify(activities));
+          
+          toast({
+            title: "Follow-up scheduled",
+            description: `Appointment created for ${formattedDate} at ${formattedTime}`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error scheduling follow-up:", error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule follow-up",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1724,6 +1853,24 @@ ${consultation.response.patientEducation}
                           </svg>
                           Print
                         </Button>
+                      </div>
+                      <div className="border-t pt-4">
+                        <h3 className="text-sm font-semibold mb-3 text-gray-700">Schedule Follow-up</h3>
+                        <div className="bg-gray-50 p-3 rounded-md mb-3">
+                          <p className="text-sm text-gray-600 mb-2">
+                            <span className="font-medium">Recommendation: </span>
+                            {selectedConsultation.response?.followUpRecommendation || "No specific recommendation"}
+                          </p>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleScheduleFollowUp(selectedConsultation)}
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Create Follow-up Appointment
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
