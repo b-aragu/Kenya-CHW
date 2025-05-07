@@ -1,4 +1,4 @@
-const Consultation = require('../models/Consultation');
+const {Consultation} = require('../models');
 
 const createConsultation = async (req, res) => {
     try {

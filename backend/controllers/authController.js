@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const {User} = require('../models');
 
 const register = async (req, res) => {
     try{
@@ -17,21 +17,31 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try{
-        const{phone, password} = req.body;
+        const{phone, pin} = req.body;
         const user = await  User.findOne({where: { phone } });
 
         if (!user) {
             return res.status(401).json({message: 'User not found'});
         }
 
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+        const isMatch = await bcrypt.compare(pin, user.password_hash);
         if (!isMatch) {
             return res.status(401).json({message: 'Invalid password/pin'})
         }
 
         const token = jwt.sign({id: user.id, role: user.role}, process.env.JWT_SECRET, {expiresIn: '1h'});
 
-        res.json({message: 'Login successful', token})
+        res.status(200).json({
+            message: 'Login successful',
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+            }
+        })
     } catch (error){
         console.error('Login Error: ', error);
         res.status(500).json({message: 'Error logging in', error: error.message});

@@ -1,4 +1,4 @@
-const SymptomReport = require('../models/SymptomReport');
+const {SymptomReport} = require('../models');
 const { predictDisease } = require('../utils/predictionEngine');
 
 const createSymptomReport = async (req, res) => {
