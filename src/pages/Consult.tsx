@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, AlertCircle, ArrowRight, ListFilter } from "lucide-react";
+import { Loader2, Plus, AlertCircle, ArrowRight, ListFilter, Calendar } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,16 +26,13 @@ import {
 } from "@/components/ui/select";
 import { 
   generateConsultation, 
-  getConsultations, 
-  saveConsultation, 
   testGroqConnection,
-  queueConsultation,
-  getQueuedConsultations,
-  processConsultationQueue,
   ConsultationRequest, 
   ConsultationResponse 
 } from "@/services/groqService";
 import { Patient } from "@/types/patient";
+import { useAppContext } from "@/context/AppContext";
+import { format } from "date-fns";
 
 // Define the consultation type for our application
 interface Consultation {
@@ -54,13 +51,12 @@ interface Consultation {
 const Consult = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
-  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const { state, setState, addToSyncQueue } = useAppContext();
+  const [isLoading, setIsLoading] = useState(false);
   const [isNewConsultOpen, setIsNewConsultOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedConsultation, setSelectedConsultation] = useState<Consultation | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [filter, setFilter] = useState<"all" | "active" | "pending" | "completed">("all");
   const [connectionStatus, setConnectionStatus] = useState<{
     checked: boolean;
@@ -71,6 +67,35 @@ const Consult = () => {
     connected: false,
     message: "Checking connection..."
   });
+  const context = useAppContext();
+
+  // Get patients and consultations from context
+  const patients = state.userData?.patients || [];
+  const consultations = state.userData?.consultations || [];
+
+  // Calculate queued consultations
+  const queuedConsultations = consultations.filter(c => 
+    c.status === "pending" && !c.response
+  );
+
+  // Check groq api key
+  useEffect(() => {
+    if (!import.meta.env.VITE_GROQ_API_KEY) {
+      console.error("Groq API key is missing from environment variables");
+      toast({
+        title: "API Key Missing",
+        description: "Groq API key is not configured. Consultations will not work.",
+        variant: "destructive",
+        duration: 10000
+      });
+    
+      setConnectionStatus({
+        checked: true,
+        connected: false,
+        message: "API key not configured"
+      });
+    }
+  }, [toast]);
 
   // New consultation form state
   const [formData, setFormData] = useState<{
@@ -91,9 +116,8 @@ const Consult = () => {
     additionalNotes: "",
   });
 
-  // Add state for offline mode and queued consultations
+  // Add state for offline mode
   const [isOffline, setIsOffline] = useState(false);
-  const [queuedConsultations, setQueuedConsultations] = useState<any[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
   const checkGroqConnection = async () => {
@@ -117,16 +141,10 @@ const Consult = () => {
 
   useEffect(() => {
     // Check if user is authenticated
-    const auth = localStorage.getItem("kenya-chw-auth");
-    if (!auth) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       navigate("/");
       return;
-    }
-
-    // Load patients
-    const storedPatients = localStorage.getItem("kenya-chw-patients");
-    if (storedPatients) {
-      setPatients(JSON.parse(storedPatients));
     }
 
     // Check Groq connection
@@ -159,81 +177,6 @@ const Consult = () => {
         console.error("Error processing pending consultation:", error);
       }
     }
-
-    // Load actual consultations from localStorage
-    const loadConsultations = async () => {
-      setIsLoading(true);
-      try {
-        const storedConsultations = getConsultations();
-        
-        // If no consultations exist, create sample ones
-        if (!storedConsultations || storedConsultations.length === 0) {
-      const mockConsultations = [
-        {
-          id: "CON-001",
-          patientId: "CHW-001234",
-          patientName: "Jane Wambui",
-              symptoms: "Patient has severe breathing difficulty and high fever",
-              status: "active" as const,
-              priority: "high" as const,
-              createdAt: new Date().toISOString(),
-          lastMessage: "Patient has severe breathing difficulty and high fever",
-        },
-        {
-          id: "CON-002",
-          patientId: "CHW-004567",
-          patientName: "James Odhiambo",
-              symptoms: "Patient with persistent cough for 2 weeks",
-              status: "pending" as const,
-              priority: "medium" as const,
-              createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-          lastMessage: "Patient with persistent cough for 2 weeks",
-        },
-        {
-          id: "CON-003",
-          patientId: "CHW-005678",
-          patientName: "Sarah Mutua",
-              symptoms: "Follow-up on previous malaria treatment",
-              status: "completed" as const,
-              priority: "low" as const,
-              createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          lastMessage: "Follow-up on previous malaria treatment",
-        },
-      ];
-      
-          // Save mock consultations
-          localStorage.setItem("kenya-chw-consultations", JSON.stringify(mockConsultations));
-      setConsultations(mockConsultations);
-        } else {
-          setConsultations(storedConsultations);
-        }
-
-        // Check if there's a consultation to open
-        const consultationIdToOpen = localStorage.getItem('open-consultation-id');
-        if (consultationIdToOpen) {
-          // Find the consultation
-          const consultationToOpen = storedConsultations.find(c => c.id === consultationIdToOpen);
-          if (consultationToOpen) {
-            // Open the consultation
-            setSelectedConsultation(consultationToOpen);
-            setIsDetailOpen(true);
-          }
-          // Remove the stored ID
-          localStorage.removeItem('open-consultation-id');
-        }
-      } catch (error) {
-        console.error("Error loading consultations:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load consultations",
-          variant: "destructive",
-        });
-      } finally {
-      setIsLoading(false);
-      }
-    };
-
-    loadConsultations();
   }, [navigate, toast]);
 
   // Handle opening the consultation detail dialog
@@ -245,7 +188,7 @@ const Consult = () => {
   // Handle creating a new consultation
   const handleCreateConsultation = async () => {
     if (!formData.patientId || !formData.symptoms) {
-    toast({
+      toast({
         title: "Required fields missing",
         description: "Please select a patient and enter symptoms",
         variant: "destructive",
@@ -314,11 +257,22 @@ const Consult = () => {
           vitalSigns: request.vitalSigns,
         };
 
-        // Save consultation
-        saveConsultation(newConsultation);
+        // Update state with new consultation
+        setState(prev => ({
+          ...prev,
+          userData: {
+            ...prev.userData!,
+            consultations: [newConsultation, ...(prev.userData?.consultations || [])]
+          }
+        }));
 
-        // Update state
-        setConsultations(prev => [newConsultation, ...prev]);
+        // Add to sync queue
+        addToSyncQueue({
+          type: "create",
+          model: "Consultation",
+          data: newConsultation,
+          tempId: newConsultation.id
+        });
         
         // Close dialog and show success toast
         setIsNewConsultOpen(false);
@@ -342,47 +296,54 @@ const Consult = () => {
         setSelectedConsultation(newConsultation);
         setIsDetailOpen(true);
       } else {
-        // We're offline, queue the consultation
-        const consultationId = queueConsultation(request, patient.name);
+        // We're offline, create a placeholder consultation
+        const tempId = `temp-${Date.now()}`;
+        const placeholderConsultation: Consultation = {
+          id: tempId,
+          patientId: formData.patientId,
+          patientName: patient.name,
+          symptoms: formData.symptoms,
+          status: "pending",
+          priority: "medium", // Default priority
+          createdAt: new Date().toISOString(),
+          lastMessage: formData.symptoms.slice(0, 100) + (formData.symptoms.length > 100 ? "..." : ""),
+          vitalSigns: request.vitalSigns,
+        };
         
-        if (consultationId) {
-          // Create placeholder consultation
-          const placeholderConsultation: Consultation = {
-            id: consultationId,
-            patientId: formData.patientId,
-            patientName: patient.name,
-            symptoms: formData.symptoms,
-            status: "pending",
-            priority: "medium", // Default priority
-            createdAt: new Date().toISOString(),
-            lastMessage: formData.symptoms.slice(0, 100) + (formData.symptoms.length > 100 ? "..." : ""),
-            vitalSigns: request.vitalSigns,
-          };
-          
-          // Close dialog and show success toast
-          setIsNewConsultOpen(false);
-          toast({
-            title: "Consultation queued",
-            description: "Your consultation has been saved and will be processed when you're back online.",
-          });
-          
-          // Update queued consultations
-          const queued = getQueuedConsultations();
-          setQueuedConsultations(queued);
-          
-          // Reset form
-          setFormData({
-            patientId: "",
-            symptoms: "",
-            temperature: "",
-            respiratoryRate: "",
-            bloodPressure: "",
-            heartRate: "",
-            additionalNotes: "",
-          });
-        } else {
-          throw new Error("Failed to queue consultation");
-        }
+        // Update state
+        setState(prev => ({
+          ...prev,
+          userData: {
+            ...prev.userData!,
+            consultations: [placeholderConsultation, ...(prev.userData?.consultations || [])]
+          }
+        }));
+
+        // Add to sync queue
+        addToSyncQueue({
+          type: "create",
+          model: "Consultation",
+          data: placeholderConsultation,
+          tempId
+        });
+        
+        // Close dialog and show success toast
+        setIsNewConsultOpen(false);
+        toast({
+          title: "Consultation queued",
+          description: "Your consultation has been saved and will be processed when you're back online.",
+        });
+        
+        // Reset form
+        setFormData({
+          patientId: "",
+          symptoms: "",
+          temperature: "",
+          respiratoryRate: "",
+          bloodPressure: "",
+          heartRate: "",
+          additionalNotes: "",
+        });
       }
     } catch (error) {
       console.error("Error creating consultation:", error);
@@ -438,19 +399,25 @@ const Consult = () => {
       };
 
       // Update in state
-      setConsultations(prev => 
-        prev.map(c => c.id === consultation.id ? updatedConsultation : c)
-      );
+      setState(prev => ({
+        ...prev,
+        userData: {
+          ...prev.userData!,
+          consultations: prev.userData?.consultations?.map(c => 
+            c.id === consultation.id ? updatedConsultation : c
+          ) || []
+        }
+      }));
 
       // Update selected consultation
       setSelectedConsultation(updatedConsultation);
 
-      // Save to localStorage
-      const allConsultations = getConsultations();
-      const updatedAllConsultations = allConsultations.map(c => 
-        c.id === consultation.id ? {...c, response} : c
-      );
-      localStorage.setItem("kenya-chw-consultations", JSON.stringify(updatedAllConsultations));
+      // Add to sync queue
+      addToSyncQueue({
+        type: "update",
+        model: "Consultation",
+        data: updatedConsultation
+      });
 
       toast({
         title: isRegeneration ? "Assessment regenerated" : "Assessment generated",
@@ -490,46 +457,59 @@ const Consult = () => {
       // Create an updated consultation
       const updatedConsultation = {
         ...consultation,
-        status: newStatus
+        status: newStatus,
+        lastUpdated: new Date().toISOString()
       };
 
       // Update in state
-      setConsultations(prev => 
-        prev.map(c => c.id === consultation.id ? updatedConsultation : c)
-      );
+      setState(prev => ({
+        ...prev,
+        userData: {
+          ...prev.userData!,
+          consultations: prev.userData?.consultations?.map(c => 
+            c.id === consultation.id ? updatedConsultation : c
+          ) || []
+        }
+      }));
 
       // Update selected consultation
       setSelectedConsultation(updatedConsultation);
 
-      // Save to localStorage
-      const allConsultations = getConsultations();
-      const updatedAllConsultations = allConsultations.map(c => 
-        c.id === consultation.id ? {...c, status: newStatus} : c
-      );
-      localStorage.setItem("kenya-chw-consultations", JSON.stringify(updatedAllConsultations));
+      // Add to sync queue
+      addToSyncQueue({
+        type: "update",
+        model: "Consultation",
+        data: updatedConsultation
+      });
 
       // Add activity record for completed consultations
       if (newStatus === "completed") {
-        const patient = patients.find(p => p.id === consultation.patientId);
-        if (patient) {
-          try {
-            const activityStorage = localStorage.getItem("kenya-chw-activity");
-            const activities = activityStorage ? JSON.parse(activityStorage) : [];
-            const newActivity = {
-              id: `activity-${Date.now()}`,
-              message: `Consultation completed for ${patient.name}`,
-              timestamp: "just now",
-              createdAt: new Date(),
-              type: "follow_up",
-              patientId: patient.id,
-              read: false
-            };
-            activities.unshift(newActivity);
-            localStorage.setItem("kenya-chw-activity", JSON.stringify(activities));
-          } catch (error) {
-            console.error("Error saving activity:", error);
+        const newActivity = {
+          id: `activity-${Date.now()}`,
+          message: `Consultation completed for ${consultation.patientName}`,
+          timestamp: "just now",
+          createdAt: new Date(),
+          type: "follow_up",
+          patientId: consultation.patientId,
+          read: false,
+          lastUpdated: new Date().toISOString()
+        };
+
+        setState(prev => ({
+          ...prev,
+          userData: {
+            ...prev.userData!,
+            activities: [newActivity, ...(prev.userData?.activities || [])]
           }
-        }
+        }));
+
+        // Add to sync queue
+        addToSyncQueue({
+          type: "create",
+          model: "Activity",
+          data: newActivity,
+          tempId: newActivity.id
+        });
       }
 
       toast({
@@ -896,7 +876,7 @@ ${consultation.response.patientEducation}
     }
   };
 
-  // Add to useEffect to check for internet connection and queued consultations
+  // Add to useEffect to check for internet connection
   useEffect(() => {
     // Check online status
     const handleOnlineStatus = () => {
@@ -919,14 +899,6 @@ ${consultation.response.patientEducation}
     // Initial check
     handleOnlineStatus();
     
-    // Load queued consultations
-    const loadQueuedConsultations = () => {
-      const queued = getQueuedConsultations();
-      setQueuedConsultations(queued);
-    };
-    
-    loadQueuedConsultations();
-    
     return () => {
       window.removeEventListener('online', handleOnlineStatus);
       window.removeEventListener('offline', handleOnlineStatus);
@@ -947,18 +919,24 @@ ${consultation.response.patientEducation}
     setIsProcessingQueue(true);
     
     try {
-      const results = await processConsultationQueue();
+      let successCount = 0;
+      let failedCount = 0;
       
-      // Refresh consultations and queue
-      const consultations = getConsultations();
-      setConsultations(consultations);
-      const queued = getQueuedConsultations();
-      setQueuedConsultations(queued);
+      for (const consultation of queuedConsultations) {
+        try {
+          // Generate assessment for queued consultation
+          await handleGenerateAssessment(consultation);
+          successCount++;
+        } catch (error) {
+          console.error(`Error processing queued consultation ${consultation.id}:`, error);
+          failedCount++;
+        }
+      }
       
       toast({
         title: "Queue processed",
-        description: `Successfully processed ${results.success} consultations. ${results.failed} failed.`,
-        variant: results.failed > 0 ? "destructive" : "default"
+        description: `Successfully processed ${successCount} consultations. ${failedCount} failed.`,
+        variant: failedCount > 0 ? "destructive" : "default"
       });
     } catch (error) {
       console.error("Error processing queue:", error);
@@ -969,6 +947,93 @@ ${consultation.response.patientEducation}
       });
     } finally {
       setIsProcessingQueue(false);
+    }
+  };
+
+   // Handle scheduling follow-up
+  const handleScheduleFollowUp = (consultation: Consultation) => {
+    try {
+      const patient = patients.find(p => p.id === consultation.patientId);
+      if (!patient) return;
+
+      // Create follow-up appointment
+      const now = new Date();
+      const followUpDate = new Date(now);
+      
+      // Parse follow-up recommendation to set appointment date
+      let daysToAdd = 7; // Default is one week
+      const recommendation = consultation.response?.followUpRecommendation?.toLowerCase() || '';
+      
+      if (recommendation.includes('24 hour') || recommendation.includes('tomorrow') || recommendation.includes('day')) {
+        daysToAdd = 1;
+      } else if (recommendation.includes('48 hour') || recommendation.includes('2 day') || recommendation.includes('two day')) {
+        daysToAdd = 2;
+      } else if (recommendation.includes('3 day') || recommendation.includes('three day')) {
+        daysToAdd = 3;
+      } else if (recommendation.includes('week')) {
+        const weekMatch = recommendation.match(/(\d+)\s*week/);
+        if (weekMatch && weekMatch[1]) {
+          daysToAdd = parseInt(weekMatch[1]) * 7;
+        }
+      } else if (recommendation.includes('month')) {
+        const monthMatch = recommendation.match(/(\d+)\s*month/);
+        if (monthMatch && monthMatch[1]) {
+          daysToAdd = parseInt(monthMatch[1]) * 30;
+        }
+      }
+      
+      followUpDate.setDate(followUpDate.getDate() + daysToAdd);
+      
+      // Format date and time
+      const formattedDate = followUpDate.toISOString().split('T')[0];
+      const hours = String(9 + Math.floor(Math.random() * 8)).padStart(2, '0');
+      const formattedTime = `${hours}:00`;
+      
+      // Create appointment object
+      const followUpAppointment = {
+        id: `APT-${Date.now().toString().slice(-6)}`,
+        patientId: consultation.patientId,
+        patientName: consultation.patientName,
+        date: formattedDate,
+        time: formattedTime,
+        type: "Follow-up Consultation",
+        notes: `Follow-up for consultation ${consultation.id}. ${consultation.response?.followUpRecommendation || ''}`,
+        status: "scheduled",
+        createdAt: new Date().toISOString()
+      };
+      
+      // Add as a new consultation
+      context.addToSyncQueue({
+        type: 'create',
+        model: 'Consultation',
+        tempId: `TMP-CONS-${Date.now()}`,
+        data: {
+          patientId: followUpAppointment.patientId,
+          notes: followUpAppointment.notes,
+          status: 'pending',
+          lastUpdated: new Date().toISOString(),
+        }
+      }
+      );
+
+      // Add activity
+      context.addActivity(
+        `Scheduled follow-up for ${consultation.patientName} on ${formattedDate} at ${formattedTime}`,
+        "appointment",
+        consultation.patientId
+      );
+
+      toast({
+        title: "Follow-up scheduled",
+        description: `Appointment created for ${formattedDate} at ${formattedTime}`,
+      });
+    } catch (error) {
+      console.error("Error scheduling follow-up:", error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule follow-up",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1724,6 +1789,24 @@ ${consultation.response.patientEducation}
                           </svg>
                           Print
                         </Button>
+                      </div>
+                      <div className="border-t pt-4">
+                        <h3 className="text-sm font-semibold mb-3 text-gray-700">Schedule Follow-up</h3>
+                        <div className="bg-gray-50 p-3 rounded-md mb-3">
+                          <p className="text-sm text-gray-600 mb-2">
+                            <span className="font-medium">Recommendation: </span>
+                            {selectedConsultation.response?.followUpRecommendation || "No specific recommendation"}
+                          </p>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleScheduleFollowUp(selectedConsultation)}
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Create Follow-up Appointment
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

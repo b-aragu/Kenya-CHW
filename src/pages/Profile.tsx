@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/layout/MobileLayout";
@@ -7,34 +6,99 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
+import axios from 'axios';
+import { useAppContext } from "@/context/AppContext";
+
+// Helper function for loading sync storage?
+const safeParseJSON = (str: string | null): any => {
+  if (str === null || str === 'undefined') return {};
+  try { return JSON.parse(str); }
+  catch (err) {
+    console.error('JSON parsing error: ', err);
+    return {};
+  }
+};
+
+// format last sync time
+const formatTimeAgo = (dateString: string): string => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  let interval = seconds / 3153600;
+  if (interval > 1) return Math.floor(interval) + ' years ago';
+
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + ' months ago';
+
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + ' days ago';
+
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + ' hours ago';
+
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + ' minutes ago';
+
+  return Math.floor(interval) + ' seconds ago';
+};
 
 const Profile = () => {
   const navigate = useNavigate();
+  const { state, syncOfflineChanges } = useAppContext();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState({
-    name: "David Mwangi",
-    role: "Community Health Worker",
-    facility: "Kilifi County Hospital",
-    region: "Kilifi County",
-    phoneNumber: "+254712345678",
-    lastSync: "2 hours ago",
+    name: "",
+    role: "",
+    facility: "",
+    region: "",
+    phoneNumber: "",
+    lastSync: "",
     appVersion: "1.0.0",
   });
 
   useEffect(() => {
     // Check if user is authenticated
-    const auth = localStorage.getItem("kenya-chw-auth");
-    if (!auth) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       navigate("/");
       return;
     }
 
-    // Simulate loading user data
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
-  }, [navigate]);
+    // get user data from local storage
+    const userProfile = safeParseJSON(localStorage.getItem('userProfile'));
+    const storedUserData = safeParseJSON(localStorage.getItem('userData'));
+
+    setUserData({
+      name: userProfile.name || 'CHW',
+      role: userProfile.role === 'chw' ? 'Community Health Worker' : userProfile.role,
+      facility: userProfile.facility || 'Unkown facility',
+      region: userProfile.region || 'Unkown region',
+      phoneNumber: userProfile.phone || 'Unkown',
+      lastSync: storedUserData.lastSync ? formatTimeAgo(storedUserData.lastSync) : 'Never',
+      appVersion: '1.0.0',
+    });
+
+    setIsLoading(false);
+  }, [navigate, state.userData]);
+
+  const handleSyncData = async () => {
+    try {
+      const result = await syncOfflineChanges();
+      if (result.success){
+        // update last sync time
+        const storedUserData = safeParseJSON(localStorage.getItem('userData'));
+        const newLastSync = new Date().toISOString();
+
+        localStorage.setItem('userData', JSON.stringify({ ...storedUserData, lastSync: newLastSync }));
+
+        setUserData(prev => ({...prev, lastSync: formatTimeAgo(newLastSync)}));
+
+        toast({ title: 'Sync successful', description: 'All ofline data has been synchronized' });
+      } else{ toast({ title: 'Sync Failed', description: result.error || 'Could not sync data. Please try again.', variant: 'destructive' }); }
+    } catch (error) { toast({ title: 'Sync Error', description: 'An unexpected error occured during sunc', variant: 'destructive' }); }
+  };
 
   const handleFeatureClick = () => {
     toast({
@@ -45,7 +109,11 @@ const Profile = () => {
 
   const handleLogout = () => {
     // Remove auth from localStorage
-    localStorage.removeItem("kenya-chw-auth");
+    localStorage.removeItem("token");
+    localStorage.removeItem('userProfile');
+    localStorage.removeItem('userData');
+    localStorage.removeItem('syncQueue');
+    localStorage.removeItem('create-consultation')
     
     toast({
       title: "Logged out successfully"
@@ -116,9 +184,9 @@ const Profile = () => {
                 <Button 
                   variant="ghost" 
                   className="w-full justify-start font-normal text-left"
-                  onClick={handleFeatureClick}
+                  onClick={handleSyncData}
                 >
-                  Sync Data
+                  Sync Data Now
                 </Button>
                 <Separator />
                 <Button 

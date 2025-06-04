@@ -1,41 +1,59 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { getDashboardStats } from "@/services/mockData";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAppContext } from "@/context/AppContext";
 
-const StatsSummary = () => {
+export interface StatsSummaryHandle{ refresh: () => void; }
+
+const StatsSummary = forwardRef<StatsSummaryHandle>((_, ref) => {
+  const { state } = useAppContext();
   const [stats, setStats] = useState({
     totalPatients: 0,
     newPatientsThisWeek: 0
   });
   const [loaded, setLoaded] = useState(false);
 
+   // 1) Define a function that reads from context and recomputes stats
+  const computeStats = () => {
+    const patients = state.userData?.patients || [];
+    const consultations = state.userData?.consultations || [];
+    const {
+      totalPatients,
+      newPatientsThisWeek,
+      // (you could also grab followUps and urgentCases if you wanted)
+    } = getDashboardStats(patients, consultations);
+
+    setStats({ totalPatients, newPatientsThisWeek });
+    setLoaded(true);
+  };
+  // 2) Expose a `.refresh()` to the parent via ref
+  useImperativeHandle(ref, () => ({
+    refresh() {
+      computeStats();
+    },
+  }));
+
+  // 3) On mount, compute stats once, and add listener for dashboard-refresh
   useEffect(() => {
-    const fetchData = () => {
-      const data = getDashboardStats();
-      setStats({
-        totalPatients: data.totalPatients,
-        newPatientsThisWeek: data.newPatientsThisWeek
-      });
-      setLoaded(true);
+    computeStats();
+
+    const onRefreshEvent = () => {
+      computeStats();
     };
-
-    fetchData();
-
-    // Listen for dashboard refresh events
-    const refreshHandler = () => fetchData();
-    window.addEventListener('dashboard-refresh', refreshHandler);
+    window.addEventListener("dashboard-refresh", onRefreshEvent);
 
     return () => {
-      window.removeEventListener('dashboard-refresh', refreshHandler);
+      window.removeEventListener("dashboard-refresh", onRefreshEvent);
     };
-  }, []);
-
-  const growthRate = stats.totalPatients > 0 
-    ? Math.round((stats.newPatientsThisWeek / stats.totalPatients) * 100) 
-    : 0;
+  }, [state.userData]); 
   
-  // Simple growth trend indicator
+   // 4) Derive growthRate and arrow direction
+  const { totalPatients, newPatientsThisWeek } = stats;
+  const growthRate =
+    totalPatients > 0
+      ? Math.round((newPatientsThisWeek / totalPatients) * 100)
+      : 0;
   const isPositiveGrowth = growthRate > 0;
   const isFlatGrowth = growthRate === 0;
 
@@ -55,7 +73,7 @@ const StatsSummary = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
-          {stats.totalPatients}
+          {totalPatients}
         </motion.p>
       </div>
       
@@ -68,7 +86,7 @@ const StatsSummary = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
-          {stats.newPatientsThisWeek}
+          {newPatientsThisWeek}
         </motion.p>
       </div>
       
@@ -90,6 +108,7 @@ const StatsSummary = () => {
       </div>
     </motion.div>
   );
-};
+});
 
+StatsSummary.displayName = 'Statsummary';
 export default StatsSummary; 

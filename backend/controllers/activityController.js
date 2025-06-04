@@ -11,7 +11,7 @@ const recentActivity = async (req, res) =>{
         });
         res.json(activites);
     } catch (error){
-        res.status(500).json({'message': 'erro fetching recent activites', error: error.message});
+        res.status(500).json({'message': 'error fetching recent activites', error: error.message});
     }
 };
 
@@ -33,10 +33,10 @@ const createActivity = async(req, res) =>{
         const safePatientID = patientID || null;
 
         const newActivity = await Activity.create({
-            type, message, safePatientID, userId,
+            type, message, safePatientID, userId, timestamp: new Date()
         });
 
-        res.status(201).json(newActivity);
+        res.status(201).json({...newActivity.toJSON(), _syncStatus: 'synced'});
     } catch (err) {
         res.status(500).json({message: 'Error creating activity', error: err.message});
     }

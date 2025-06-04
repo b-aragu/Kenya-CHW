@@ -13,10 +13,21 @@ import Consult from "./pages/Consult";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import { SyncProvider } from "./context/SyncContext";
+import { useState } from "react";
+import { useAppContext } from "./context/AppContext";
+import SignupForm from "./components/auth/SignupForm";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('token'));
+  const { state, setState } = useAppContext();
+
+  const handleAuthSucess = (userData: any) => {
+    setState((prev) => ({...prev, userData: userData, }));
+    setIsAuthenticated(true);
+  };
+  return(
   <QueryClientProvider client={queryClient}>
     <SyncProvider>
       <TooltipProvider>
@@ -25,6 +36,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path='/signup' element={<SignupForm />}/>
             <Route path="/home" element={<Home />} />
             <Route path="/patients" element={<Patients />} />
             <Route path="/patients/add" element={<AddPatient />} />
@@ -38,6 +50,6 @@ const App = () => (
       </TooltipProvider>
     </SyncProvider>
   </QueryClientProvider>
-);
+)};
 
 export default App;

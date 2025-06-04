@@ -1,7 +1,8 @@
-import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
+import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { Users, UserPlus, UserCheck, AlertTriangle } from "lucide-react";
 import DashboardTile from "./DashboardTile";
 import { getDashboardStats, DashboardStats as StatsType } from "@/services/mockData";
+import { useAppContext } from "@/context/AppContext";
 
 interface DashboardStatsProps {
   onRefresh?: () => void;
@@ -14,13 +15,17 @@ export interface DashboardStatsRef {
 
 const DashboardStats = forwardRef<DashboardStatsRef, DashboardStatsProps>(
   (props, ref) => {
+    const { state } = useAppContext();
     const [stats, setStats] = useState<StatsType | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+     // 1) Fetch stats by pulling arrays out of context and passing them to getDashboardStats(...)
     const fetchStats = async () => {
       setIsLoading(true);
       try {
-        const data = getDashboardStats();
+        const patients = state.userData?.patients || [];
+        const consultations = state.userData?.consultations || [];
+        const data = getDashboardStats(patients, consultations);
         setStats(data);
       } catch (error) {
         console.error("Error fetching stats:", error);
@@ -34,11 +39,12 @@ const DashboardStats = forwardRef<DashboardStatsRef, DashboardStatsProps>(
       refresh: fetchStats
     }));
 
+    // 2) On mount, load once
     useEffect(() => {
       fetchStats();
-    }, []);
+    }, [state.userData]);
 
-    // Listen for refresh triggers
+    // 3) Listen for the 'dashboard-refresh' event, if parent wants to trigger it
     useEffect(() => {
       if (props.onRefresh) {
         const refreshListener = () => {
@@ -52,7 +58,7 @@ const DashboardStats = forwardRef<DashboardStatsRef, DashboardStatsProps>(
           window.removeEventListener('dashboard-refresh', refreshListener);
         };
       }
-    }, [props.onRefresh]);
+    }, [props.onRefresh, state.userData]);
 
     if (isLoading) {
       return <div className="grid grid-cols-2 gap-4">
@@ -96,5 +102,4 @@ const DashboardStats = forwardRef<DashboardStatsRef, DashboardStatsProps>(
 );
 
 DashboardStats.displayName = "DashboardStats";
-
 export default DashboardStats;

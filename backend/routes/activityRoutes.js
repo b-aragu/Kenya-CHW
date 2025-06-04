@@ -1,11 +1,11 @@
 const express = require('express');
-const {recentActivity, markAsRead, createActivity} = require('../controllers/activityController');
+const activityController = require('../controllers/activityController');
 const verifyToken = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.get('/recent', verifyToken, recentActivity);
-router.patch('/:id/read', verifyToken, markAsRead);
-router.post('/', verifyToken, createActivity);
+router.get('/recent', verifyToken, activityController.recentActivity);
+router.patch('/:id/read', verifyToken, activityController.markAsRead);
+router.post('/', verifyToken, activityController.createActivity);
 
 module.exports = router;

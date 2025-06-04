@@ -8,7 +8,9 @@ const authRoutes = require('./routes/authRoutes');
 const patientRoutes = require('./routes/patientRoutes');
 const consultationRoutes = require('./routes/consultationRoutes');
 const predictionRoutes = require('./routes/predictionRoutes');
-const activityController = require('./routes/activityRoutes');
+const activityRoutes = require('./routes/activityRoutes');
+const syncRoutes = require('./routes/syncRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 dotenv.config();
 
@@ -26,11 +28,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/consultations', consultationRoutes);
 app.use('/api/predictions', predictionRoutes);
-app.use('/api/activities', activityController);
+app.use('/api/activities', activityRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/user-data', userRoutes);
 
 // database
 
-sequelize.sync().then(() => {
+sequelize.sync({ alter: true }).then(() => {
     console.log('Database synced');
 }).catch((err) => {
     console.error('Error syncing database', err);

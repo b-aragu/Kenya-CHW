@@ -14,6 +14,9 @@ export interface Patient {
   pregnancyStatus?: string;
   weight?: string;
   height?: string;
+  chwId?: string;
+  _syncStatus?: string;
+  lastUpdated?: string;
 }
 
 export interface TriageResult {

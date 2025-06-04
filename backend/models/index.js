@@ -18,6 +18,13 @@ Object.keys(db).forEach((modelName) =>{
     }
 });
 
+// For development only - don't use in production
+if (process.env.NODE_ENV === 'development') {
+  sequelize.sync({ alter: true })
+    .then(() => console.log('Database synced'))
+    .catch(err => console.error('Sync error:', err));
+}
+
 // attach Sequalize instance and class to db
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

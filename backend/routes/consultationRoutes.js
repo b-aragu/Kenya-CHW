@@ -1,10 +1,14 @@
 const express = require('express');
-const { createConsultation, getConsultationsByUser } = require('../controllers/consultationController');
+const consultationController = require('../controllers/consultationController');
 const verifyToken = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.post('/', verifyToken, createConsultation);
-router.get('/', verifyToken, getConsultationsByUser);
+// create new consultation
+router.post('/', verifyToken, consultationController.createConsultation);
+// get consultations by user
+router.get('/', verifyToken, consultationController.getConsultationsByUser);
+// sync offline consultations
+router.post('/sync', verifyToken, consultationController.syncConsultaions);
 
 module.exports = router;

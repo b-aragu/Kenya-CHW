@@ -9,12 +9,30 @@ import AppointmentsCard from "@/components/dashboard/AppointmentsCard";
 import StatsSummary from "@/components/dashboard/StatsSummary";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserPlus, Users, Bell, RefreshCw } from "lucide-react";
-import { getRecentActivity, markActivityAsRead, Activity } from "@/services/mockData";
+import { Activity } from "@/services/mockData";
+import { useAppContext } from "@/context/AppContext";
+import { useToast } from "@/hooks/use-toast";
+import { StepId } from "framer-motion";
+import { dataTagSymbol } from "@tanstack/react-query";
 
 const AUTO_REFRESH_INTERVAL = 60000; // 60 seconds
 
+interface UserData{
+  patients: any[];
+  consultations: any[];
+  activities: Activity[];
+  user?: {
+    id: string;
+    name: string;
+    phone: string;
+    role: string;
+  };
+  lastSync?: string;
+}
+
 const Home = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [userName, setUserName] = useState("CHW");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -22,6 +40,14 @@ const Home = () => {
   const statsRef = useRef<{ refresh: () => void } | null>(null);
   const appointmentsRef = useRef<{ refresh: () => void } | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const { syncOfflineChanges } = useAppContext();
+
+  // get user data from local storage
+  const getUserData = (): UserData | null =>{
+    const data = localStorage.getItem('userData');
+    return data ? JSON.parse(data): null;
+  };
 
   // Check if there are unread notifications
   const hasUnreadNotifications = recentActivity.some(activity => !activity.read);
@@ -30,20 +56,45 @@ const Home = () => {
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // This would be a real API call in production
-      setUserName("David Mwangi");
-      const activity = getRecentActivity();
-      setRecentActivity(activity);
+      const data = getUserData();
+      if (!data){
+        toast({title: 'Data error', description: 'Couldnot load user data', variant: 'destructive',});
+        return;
+      }
+
+      setUserData(data);
+      setUserName(data.user?.name || 'chw');
+
+      // get 10 recent activities
+      const activities = data.activities || [];
+      const sortedActivities = [...activities].sort( (a,b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime() ).slice(0,10);
+      setRecentActivity(sortedActivities);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
+      toast({title: 'Data Error', description: 'Failed to load dashboard data', variant: 'destructive'});
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toast]);
+
+  // Handle sync when coming online
+  useEffect(() => {
+    const handleOnline = () => {
+      syncOfflineChanges().then(result => {
+        if (result.success){
+          toast({title: 'Sync Completed', description: 'Offline changes have been synchronized.'});
+          loadDashboardData();
+        }
+      });
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [loadDashboardData, toast]);
 
   useEffect(() => {
     // Check if user is authenticated
-    const auth = localStorage.getItem("kenya-chw-auth");
+    const auth = localStorage.getItem("token");
     if (!auth) {
       navigate("/");
       return;
@@ -56,17 +107,18 @@ const Home = () => {
       // Silent refresh (no loading indicators)
       const refreshDashboard = async () => {
         try {
-          const activity = getRecentActivity();
-          setRecentActivity(activity);
+          const data = getUserData();
+          if (!data) return;
+
+          // Update recent activities
+          const activities = data.activities || [];
+          const sortedActivities = [...activities].sort( (a,b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime() ).slice(0,10);
+          setRecentActivity(sortedActivities);
           
           // Refresh stats and appointments
-          if (statsRef.current) {
-            statsRef.current.refresh();
-          }
-          
-          if (appointmentsRef.current) {
-            appointmentsRef.current.refresh();
-          }
+          if (statsRef.current) statsRef.current.refresh();
+          if (appointmentsRef.current) appointmentsRef.current.refresh();
+
         } catch (error) {
           console.error("Error during auto-refresh:", error);
         }
@@ -87,21 +139,22 @@ const Home = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
+      // Try to sync offline changes first
+      const syncResult = await syncOfflineChanges();
+      if (syncResult.success) toast({title: 'Sync Complete', description: 'Offline changes have been synchronized',});
+
       // Refresh all dashboard components
       await loadDashboardData();
       
-      // Refresh stats using the ref
-      if (statsRef.current) {
-        statsRef.current.refresh();
-      }
-      
-      // Refresh appointments using the ref
-      if (appointmentsRef.current) {
-        appointmentsRef.current.refresh();
-      }
+      // Refresh stats and appointments using the ref
+      if (statsRef.current) statsRef.current.refresh();
+      if (appointmentsRef.current) appointmentsRef.current.refresh();
       
       // Also dispatch a custom event for any component listening
       window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+    } catch (error) {
+      console.error('Refresh Error: ', error);
+      toast({title: 'Refresh Failed', description: 'Could not refresh dashboard data', variant: 'destructive',});
     } finally {
       setTimeout(() => {
         setIsRefreshing(false);
@@ -113,11 +166,15 @@ const Home = () => {
   const handleActivityClick = (activity: Activity) => {
     // Mark activity as read
     if (!activity.read) {
-      markActivityAsRead(activity.id);
-      // Update the local state to reflect the change
-      setRecentActivity(prev => 
-        prev.map(a => a.id === activity.id ? { ...a, read: true } : a)
-      );
+      const data = getUserData();
+      if (data){
+        const updatedActivities = data.activities.map( a => a.id === activity.id ? { ...a, read: true } : a );
+        const updatedData = { ...data, activities: updatedActivities, user: data.user };
+        localStorage.setItem('userData', JSON.stringify(updatedData));
+
+        // update UI state
+        setRecentActivity(prev => prev.map( a => a.id === activity.id ? { ...a, read: true } : a ));
+      }
     }
     
     // Navigate to related patient if applicable
@@ -196,7 +253,7 @@ const Home = () => {
                         <p className={`${!activity.read ? 'font-medium' : 'text-gray-600'}`}>
                           {activity.message}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
+                        <p className="text-xs text-gray-500 mt-1">{new Date(activity.lastUpdated).toISOString()}</p>
                       </div>
                     ))
                   ) : (

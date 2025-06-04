@@ -1,4 +1,28 @@
 import { Patient } from "@/types/patient";
+import axios from 'axios';
+import { useAppContext } from "@/context/AppContext";
+
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama3-70b-8192";
+
+// Kenya-specific medical context for the prompt
+const KENYA_MEDICAL_CONTEXT = `
+You are an AI medical assistant helping Community Health Workers (CHWs) in rural Kenya. 
+Consider the following contextual information:
+- CHWs in Kenya work in resource-limited settings with minimal equipment
+- Common diseases include malaria, pneumonia, diarrheal diseases, TB, and HIV
+- Many patients have limited access to healthcare facilities
+- Medications and treatments recommended should be available in rural Kenya
+- Your guidance should be tailored to what CHWs can realistically provide in remote areas
+- Your assessment should be culturally appropriate for Kenyan patients
+
+IMPORTANT: When responding to consultations, you MUST format your answers as valid, parseable JSON 
+following the exact structure provided in the user prompt. This ensures the CHW mobile application 
+can properly display your assessment to healthcare workers.
+
+Never include explanations, text, or comments outside of the JSON structure.
+`;
 
 // Define consultation types
 export interface ConsultationRequest {
@@ -33,12 +57,6 @@ export interface ConsultationRequest {
     diagnosis?: string;
     treatment?: string;
   }[];
-  previousTriageResults?: {
-    date: string;
-    symptoms: string;
-    priority: string;
-    vitalSigns?: Record<string, string>;
-  }[];
 }
 
 export interface ConsultationResponse {
@@ -63,237 +81,11 @@ export interface ConsultationResponse {
   preventionAdvice?: string; // Prevention advice for similar conditions
 }
 
-// Environment variables - in real production app you would use a .env file
-const GROQ_API_KEY = "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"; 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama3-70b-8192"; // Using Llama 3 70B model which is good for medical context
-
-// Kenya-specific medical context for the prompt
-const KENYA_MEDICAL_CONTEXT = `
-You are an AI medical assistant helping Community Health Workers (CHWs) in rural Kenya. 
-Consider the following contextual information:
-- CHWs in Kenya work in resource-limited settings with minimal equipment
-- Common diseases include malaria, pneumonia, diarrheal diseases, TB, and HIV
-- Many patients have limited access to healthcare facilities
-- Medications and treatments recommended should be available in rural Kenya
-- Your guidance should be tailored to what CHWs can realistically provide in remote areas
-- Your assessment should be culturally appropriate for Kenyan patients
-
-IMPORTANT: When responding to consultations, you MUST format your answers as valid, parseable JSON 
-following the exact structure provided in the user prompt. This ensures the CHW mobile application 
-can properly display your assessment to healthcare workers.
-
-Never include explanations, text, or comments outside of the JSON structure.
-`;
-
-/**
- * Queue to store consultation requests when offline
- */
-interface QueuedConsultation {
-  request: ConsultationRequest;
-  patientName: string;
-  timestamp: string;
-  id: string;
-}
-
-/**
- * Save a consultation request to the offline queue
- */
-export const queueConsultation = (request: ConsultationRequest, patientName: string): string => {
-  try {
-    const id = `OFFLINE-${Date.now()}`;
-    const queuedConsultation: QueuedConsultation = {
-      request,
-      patientName,
-      timestamp: new Date().toISOString(),
-      id
-    };
-    
-    // Get existing queue
-    const existingQueue = localStorage.getItem("kenya-chw-consultation-queue");
-    const queue = existingQueue ? JSON.parse(existingQueue) : [];
-    
-    // Add new request to queue
-    queue.push(queuedConsultation);
-    
-    // Save updated queue
-    localStorage.setItem("kenya-chw-consultation-queue", JSON.stringify(queue));
-    
-    return id;
-  } catch (error) {
-    console.error("Error queuing consultation:", error);
-    return "";
-  }
-};
-
-/**
- * Get all queued consultations
- */
-export const getQueuedConsultations = (): QueuedConsultation[] => {
-  try {
-    const queue = localStorage.getItem("kenya-chw-consultation-queue");
-    return queue ? JSON.parse(queue) : [];
-  } catch (error) {
-    console.error("Error getting queued consultations:", error);
-    return [];
-  }
-};
-
-/**
- * Remove a consultation from the queue
- */
-export const removeFromQueue = (id: string): boolean => {
-  try {
-    const queue = getQueuedConsultations();
-    const updatedQueue = queue.filter(item => item.id !== id);
-    localStorage.setItem("kenya-chw-consultation-queue", JSON.stringify(updatedQueue));
-    return true;
-  } catch (error) {
-    console.error("Error removing from queue:", error);
-    return false;
-  }
-};
-
-/**
- * Process offline queue when online
- */
-export const processConsultationQueue = async (): Promise<{success: number, failed: number}> => {
-  const queue = getQueuedConsultations();
-  const results = {success: 0, failed: 0};
-  
-  for (const item of queue) {
-    try {
-      // Try to generate consultation
-      const response = await generateConsultation(item.request);
-      
-      // Create new consultation object
-      const consultation = {
-        id: item.id.replace('OFFLINE-', 'CON-'),
-        patientId: item.request.patientId,
-        patientName: item.patientName,
-        symptoms: item.request.symptoms,
-        status: "active" as const,
-        priority: response.urgencyLevel,
-        createdAt: item.timestamp,
-        lastMessage: item.request.symptoms.slice(0, 100) + (item.request.symptoms.length > 100 ? "..." : ""),
-        response,
-        vitalSigns: item.request.vitalSigns,
-      };
-      
-      // Save consultation
-      saveConsultation(consultation);
-      
-      // Remove from queue
-      removeFromQueue(item.id);
-      
-      results.success++;
-    } catch (error) {
-      console.error(`Error processing queued consultation ${item.id}:`, error);
-      results.failed++;
-    }
-  }
-  
-  return results;
-};
-
 /**
  * Generate a consultation response using Groq's LLM API
  */
 export const generateConsultation = async (request: ConsultationRequest): Promise<ConsultationResponse> => {
   try {
-    // Extract age from date of birth if given patient object
-    const getPatientInfo = async (patientId: string) => {
-      try {
-        const storedPatients = localStorage.getItem("kenya-chw-patients");
-        if (storedPatients) {
-          const patients: Patient[] = JSON.parse(storedPatients);
-          const patient = patients.find(p => p.id === patientId);
-          if (patient) {
-            // Calculate age from dateOfBirth
-            const birthDate = new Date(patient.dateOfBirth);
-            const today = new Date();
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const monthDiff = today.getMonth() - birthDate.getMonth();
-            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-              age--;
-            }
-
-            // Get previous consultations
-            const previousConsultations = [];
-            try {
-              const storedConsultations = localStorage.getItem("kenya-chw-consultations");
-              if (storedConsultations) {
-                const allConsults = JSON.parse(storedConsultations);
-                const patientConsults = allConsults
-                  .filter(c => c.patientId === patientId)
-                  .slice(0, 3) // Get the 3 most recent consultations
-                  .map(c => ({
-                    date: new Date(c.createdAt).toLocaleDateString(),
-                    symptoms: c.symptoms,
-                    diagnosis: c.response?.assessment?.split('.')[0] || '', // Get first sentence of assessment as diagnosis
-                    treatment: c.response?.recommendedActions?.join(', ') || ''
-                  }));
-                previousConsultations.push(...patientConsults);
-              }
-            } catch (err) {
-              console.error("Error getting previous consultations:", err);
-            }
-
-            // Get previous triage results
-            const previousTriageResults = [];
-            try {
-              const storedTriageResults = localStorage.getItem("kenya-chw-triage-results");
-              if (storedTriageResults) {
-                const allResults = JSON.parse(storedTriageResults);
-                const patientResults = allResults
-                  .filter(r => r.patientId === patientId)
-                  .slice(0, 3) // Get the 3 most recent triage results
-                  .map(r => ({
-                    date: new Date(r.timestamp).toLocaleDateString(),
-                    symptoms: r.symptoms,
-                    priority: r.priority,
-                    vitalSigns: {
-                      temperature: r.temperature,
-                      respiratoryRate: r.respiratoryRate
-                    }
-                  }));
-                previousTriageResults.push(...patientResults);
-              }
-            } catch (err) {
-              console.error("Error getting triage results:", err);
-            }
-
-            return {
-              name: patient.name,
-              age,
-              gender: patient.gender,
-              village: patient.village,
-              medicalHistory: patient.medicalHistory || '',
-              chronicConditions: patient.chronicConditions || [],
-              allergies: patient.allergies || [],
-              previousConsultations: previousConsultations.length > 0 ? previousConsultations : undefined,
-              previousTriageResults: previousTriageResults.length > 0 ? previousTriageResults : undefined
-            };
-          }
-        }
-        return null;
-      } catch (error) {
-        console.error("Error getting patient info:", error);
-        return null;
-      }
-    };
-
-    // Get additional patient info if not provided
-    if (!request.patientInfo.name) {
-      const patientInfo = await getPatientInfo(request.patientId);
-      if (patientInfo) {
-        request.patientInfo = {
-          ...request.patientInfo,
-          ...patientInfo
-        };
-      }
-    }
-
     // Construct the prompt for the LLM
     const prompt = constructMedicalPrompt(request);
 
@@ -375,19 +167,6 @@ ${request.previousConsultations.map(consult =>
 ).join("\n")}`;
   }
 
-  // Format previous triage results if available
-  let previousTriageSection = "";
-  if (request.previousTriageResults?.length) {
-    previousTriageSection = `PREVIOUS ASSESSMENTS:
-${request.previousTriageResults.map(triage => 
-  `- Date: ${triage.date}
-  - Symptoms: ${triage.symptoms}
-  - Priority: ${triage.priority}
-  ${triage.vitalSigns?.temperature ? `- Temperature: ${triage.vitalSigns.temperature}` : ""}
-  ${triage.vitalSigns?.respiratoryRate ? `- Respiratory Rate: ${triage.vitalSigns.respiratoryRate}` : ""}`
-).join("\n")}`;
-  }
-
   // Format vital signs if available
   let vitalSignsSection = "";
   if (vitalSigns) {
@@ -429,8 +208,6 @@ ${symptoms}
 ${vitalSignsSection ? vitalSignsSection : ""}
 
 ${previousConsultationsSection ? previousConsultationsSection : ""}
-
-${previousTriageSection ? previousTriageSection : ""}
 
 ${additionalNotes ? `ADDITIONAL NOTES:\n${additionalNotes}` : ""}
 
@@ -622,96 +399,39 @@ const parseAIResponse = (aiResponse: string): ConsultationResponse => {
   }
 };
 
-// Function to save consultation to localStorage
-export const saveConsultation = (
-  consultation: {
-    id: string;
-    patientId: string;
-    patientName: string;
-    symptoms: string;
-    status: string;
-    priority: string;
-    createdAt: string;
-    lastMessage: string;
-    response?: ConsultationResponse;
-  }
-) => {
-  try {
-    // Get existing consultations
-    const existingConsultations = localStorage.getItem("kenya-chw-consultations");
-    let consultations = existingConsultations ? JSON.parse(existingConsultations) : [];
-    
-    // Add new consultation
-    consultations.unshift(consultation);
-    
-    // Save to localStorage
-    localStorage.setItem("kenya-chw-consultations", JSON.stringify(consultations));
-    
-    return true;
-  } catch (error) {
-    console.error("Error saving consultation:", error);
-    return false;
-  }
-};
-
-// Function to get consultations from localStorage
-export const getConsultations = () => {
-  try {
-    const consultations = localStorage.getItem("kenya-chw-consultations");
-    return consultations ? JSON.parse(consultations) : [];
-  } catch (error) {
-    console.error("Error getting consultations:", error);
-    return [];
-  }
-};
-
 /**
  * Test the connection to the Groq API
  */
-export const testGroqConnection = async (): Promise<{ connected: boolean; message: string }> => {
+export const testGroqConnection = async () => {
+  if (!GROQ_API_KEY) {
+    return { connected: false, message: 'API key not configured'};
+  }
   try {
-    // Simple test request to Groq API
-    const response = await fetch(GROQ_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${GROQ_API_KEY}`
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama3-8b-8192",
+        messages: [{ role: "user", content: "Test connection" }],
+        max_tokens: 5,
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful assistant."
-          },
-          {
-            role: "user",
-            content: "Please respond with 'Connection successful' if you receive this message."
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 20
-      })
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 5000, // Add timeout
+      }
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { 
-        connected: false, 
-        message: `API error: ${response.status} ${errorText}` 
-      };
-    }
-
-    const data = await response.json();
-    return { 
-      connected: true, 
-      message: "Successfully connected to Groq API" 
+    return {
+      connected: true,
+      message: "Connection successful",
     };
-  } catch (error) {
-    console.error("Error testing Groq connection:", error);
-    return { 
-      connected: false, 
-      message: `Connection error: ${error instanceof Error ? error.message : String(error)}` 
+  } catch (error: any) {
+    console.error("Groq connection error:", error.response?.data || error.message);
+    return {
+      connected: false,
+      message: error.response?.data?.error?.message || error.message,
     };
   }
-}; 
+};

@@ -15,8 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import MobileLayout from "@/components/layout/MobileLayout";
 import { ArrowLeft, Calendar, ClipboardList, Stethoscope, FileText, ArrowRight, Clock } from "lucide-react";
 import { Patient, TriageResult } from "@/types/patient";
-import { getConsultations } from "@/services/groqService";
 import { useToast } from "@/components/ui/use-toast";
+import { useAppContext } from "@/context/AppContext";
 
 interface Consultation {
   id: string;
@@ -51,61 +51,99 @@ const PatientHistory = () => {
   const [triageResults, setTriageResults] = useState<TriageResult[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [offlineMode, setOfflineMode] = useState(!navigator.onLine);
+  const { syncOfflineChanges } = useAppContext();
   
   useEffect(() => {
     // Check if user is authenticated
-    const auth = localStorage.getItem("kenya-chw-auth");
-    if (!auth) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       navigate("/");
       return;
     }
     
-    // Load patient and history data
+    // Handle online/offline status
+    const handleOnline = () => {
+      setOfflineMode(false);
+      syncOfflineChanges().then(result => {
+        if (result.success) {
+          loadPatientData();
+          toast({
+            title: "Sync Complete",
+            description: "Patient data has been updated",
+          });
+        }
+      });
+    };
+
+    const handleOffline = () => setOfflineMode(true);
+
+    // Set up online/offline listeners
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Load patient data
     loadPatientData();
-  }, [id, navigate]);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [id, navigate, toast]);
   
-  const loadPatientData = async () => {
+  const loadPatientData = () => {
     setIsLoading(true);
     
     try {
-      // Load patient data
-      const storedPatients = localStorage.getItem("kenya-chw-patients");
-      if (storedPatients) {
-        const patients: Patient[] = JSON.parse(storedPatients);
-        const foundPatient = patients.find(p => p.id === id);
+      // Load all data from localStorage
+      const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+      
+      // Find patient by ID
+      const foundPatient = userData.patients?.find((p: any) => p.id === id);
+      
+      if (foundPatient) {
+        // Format patient data
+        const formattedPatient: Patient = {
+          id: foundPatient.id,
+          name: foundPatient.name,
+          dateOfBirth: foundPatient.dateOfBirth || foundPatient.dob || "Unknown",
+          gender: foundPatient.gender,
+          village: foundPatient.location || "Unknown",
+          phoneNumber: foundPatient.phone || "Unknown",
+          createdAt: foundPatient.createdAt || foundPatient.registeredAt || new Date().toISOString(),
+          followUp: foundPatient.followUp || false,
+          chwId: foundPatient.chwId || "",
+          _syncStatus: foundPatient._syncStatus || 'synced'
+        };
+        setPatient(formattedPatient);
         
-        if (foundPatient) {
-          setPatient(foundPatient);
-          
-          // Load consultations for this patient
-          const allConsultations = getConsultations();
-          const patientConsultations = allConsultations.filter(c => c.patientId === id);
-          setConsultations(patientConsultations);
-          
-          // Load triage results for this patient
-          const storedTriageResults = localStorage.getItem("kenya-chw-triage-results");
-          if (storedTriageResults) {
-            const allResults: TriageResult[] = JSON.parse(storedTriageResults);
-            const patientResults = allResults.filter(r => r.patientId === id);
-            setTriageResults(patientResults);
-          }
-          
-          // Load appointments for this patient
-          const storedAppointments = localStorage.getItem("kenya-chw-appointments");
-          if (storedAppointments) {
-            const allAppointments: Appointment[] = JSON.parse(storedAppointments);
-            const patientAppointments = allAppointments.filter(a => a.patientId === id);
-            setAppointments(patientAppointments);
-          }
-        } else {
-          toast({
-            title: "Patient not found",
-            description: "The requested patient could not be found",
-            variant: "destructive",
-          });
-          navigate("/patients");
+        // Load consultations for this patient
+        const patientConsultations = userData.consultations?.filter(
+          (c: any) => c.patientId === id
+        ) || [];
+        setConsultations(patientConsultations);
+        
+        // Load triage results for this patient
+        // Note: Triage results are stored in localStorage separately
+        const storedTriageResults = localStorage.getItem("kenya-chw-triage-results");
+        if (storedTriageResults) {
+          const allResults: TriageResult[] = JSON.parse(storedTriageResults);
+          const patientResults = allResults.filter(r => r.patientId === id);
+          setTriageResults(patientResults);
         }
+        
+        // Load appointments for this patient
+        // Note: Appointments are stored in userData
+        const patientAppointments = userData.appointments?.filter(
+          (a: any) => a.patientId === id
+        ) || [];
+        setAppointments(patientAppointments);
       } else {
+        toast({
+          title: "Patient not found",
+          description: "The requested patient could not be found",
+          variant: "destructive",
+        });
         navigate("/patients");
       }
     } catch (error) {
@@ -171,6 +209,34 @@ const PatientHistory = () => {
   const getConsultationForAssessment = (symptoms: string) => {
     return consultations.find(c => c.symptoms.includes(symptoms) || symptoms.includes(c.symptoms));
   };
+
+  const handleSyncData = async () => {
+    try {
+      setIsLoading(true);
+      const result = await syncOfflineChanges();
+      if (result.success) {
+        loadPatientData();
+        toast({
+          title: "Sync Successful",
+          description: "Patient data has been updated",
+        });
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: result.error || "Could not sync data",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Sync Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   return (
     <MobileLayout 
@@ -184,6 +250,13 @@ const PatientHistory = () => {
         </div>
       ) : patient ? (
         <div className="space-y-6">
+          {/* Offline Alert */}
+          {offlineMode && (
+            <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md text-sm">
+              Offline Mode - Showing locally stored data. Some information may be outdated.
+            </div>
+          )}
+          
           {/* Patient Summary Card */}
           <Card className="bg-white shadow-sm">
             <CardHeader className="pb-2">
@@ -272,6 +345,22 @@ const PatientHistory = () => {
               New Consult
             </Button>
           </div>
+          
+          {/* Sync Button */}
+          <Button 
+            variant="outline" 
+            onClick={handleSyncData}
+            disabled={offlineMode}
+            className={`w-full ${offlineMode ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <svg className="mr-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg>
+            Sync Patient Data
+          </Button>
           
           {/* Tabs Section */}
           <Tabs defaultValue="consultations" className="w-full">
@@ -381,7 +470,7 @@ const PatientHistory = () => {
                           {consultation.response && (
                             <div className="mt-2 border-t pt-2">
                               <p className="text-xs font-medium text-gray-500">Assessment Summary:</p>
-                              <p className="text-sm line-clamp-2">{consultation.response.assessment.split('.')[0]}.</p>
+                              <p className="text-sm line-clamp-2">{consultation.response.assessment?.split('.')[0]}.</p>
                             </div>
                           )}
                           
@@ -488,29 +577,10 @@ const PatientHistory = () => {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (patient) {
-                                    // Calculate age from date of birth
-                                    const birthDate = new Date(patient.dateOfBirth);
-                                    const today = new Date();
-                                    let age = today.getFullYear() - birthDate.getFullYear();
-                                    const monthDiff = today.getMonth() - birthDate.getMonth();
-                                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                                      age--;
-                                    }
-                                  
                                     // Create consultation from this assessment
                                     localStorage.setItem('create-consultation', JSON.stringify({
                                       patientId: patient.id,
                                       patientName: patient.name,
-                                      patientInfo: {
-                                        age,
-                                        gender: patient.gender,
-                                        village: patient.village,
-                                        medicalHistory: patient.medicalHistory,
-                                        chronicConditions: patient.chronicConditions,
-                                        allergies: patient.allergies,
-                                        medications: patient.medications,
-                                        pregnancyStatus: patient.gender === 'female' ? patient.pregnancyStatus : undefined,
-                                      },
                                       symptoms: result.symptoms,
                                       vitalSigns: {
                                         temperature: result.temperature,
@@ -610,4 +680,4 @@ const PatientHistory = () => {
   );
 };
 
-export default PatientHistory; 
+export default PatientHistory;
